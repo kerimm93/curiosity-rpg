@@ -314,6 +314,27 @@ select option { background:var(--parchment); }
 .sprint-aktiv { background:var(--gold); color:var(--wood-dark); border-color:var(--wood-dark); }
 .sprint-done { background:var(--green); color:var(--parchment); border-color:var(--green-light); }
 
+/* DASHBOARD */
+.db-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+.db-grid-full { grid-column:1/-1; }
+.db-section { background:var(--parchment); border:2px solid var(--parchment-shadow); padding:14px 16px; }
+.db-section-title { font-family:var(--pixel); font-size:6.5px; color:var(--ink-light); letter-spacing:1px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; }
+.db-section-title a { font-size:5.5px; color:var(--blue); cursor:pointer; text-decoration:underline; }
+.db-empty { font-family:var(--display); font-size:16px; color:var(--parchment-shadow); font-style:italic; }
+.db-quest-item { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--parchment-shadow); }
+.db-quest-item:last-child { border-bottom:none; }
+.db-quest-name { font-family:var(--display); font-size:17px; flex:1; color:var(--ink); }
+.db-quest-meta { font-family:var(--pixel); font-size:5.5px; color:var(--ink-light); }
+.db-sprint-step { display:flex; align-items:flex-start; gap:8px; padding:5px 0; border-bottom:1px solid var(--parchment-shadow); }
+.db-sprint-step:last-child { border-bottom:none; }
+.db-sprint-step-text { font-family:var(--display); font-size:16px; flex:1; color:var(--ink); }
+.db-problem { padding:6px 0; border-bottom:1px solid var(--parchment-shadow); font-family:var(--display); font-size:17px; color:var(--ink); }
+.db-problem:last-child { border-bottom:none; }
+.db-log { font-family:var(--display); font-size:16px; color:var(--ink-light); padding:4px 0; border-bottom:1px solid var(--parchment-shadow); }
+.db-log:last-child { border-bottom:none; }
+.db-quick-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.db-queue-embed { margin-top:8px; }
+
 /* QUEUE / SPACED REPETITION */
 .queue-card { background:var(--parchment);border:3px solid var(--wood-dark);padding:20px 22px;margin-bottom:16px;position:relative; }
 .queue-card-title { font-family:var(--display);font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;line-height:1.3; }
@@ -372,7 +393,8 @@ select option { background:var(--parchment); }
   </div>
 
   <div class="tab-row">
-    <button class="tab-btn active" onclick="switchTab('welten',this)">① Welten</button>
+    <button class="tab-btn active" id="tab-btn-dashboard" onclick="switchTab('dashboard',this)">🏠 Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('welten',this)">① Welten</button>
     <button class="tab-btn" onclick="switchTab('quests',this)">② Quests</button>
     <button class="tab-btn" onclick="switchTab('konzepte',this)">③ Wissen</button>
     <button class="tab-btn" onclick="switchTab('antilib',this)">④ Anti-Library</button>
@@ -389,8 +411,13 @@ select option { background:var(--parchment); }
 
   <div class="panel-wrap">
 
+    <!-- 🏠 DASHBOARD -->
+    <div id="panel-dashboard" class="panel active">
+      <div id="dashboard-view"></div>
+    </div>
+
     <!-- ① WELTEN -->
-    <div id="panel-welten" class="panel active">
+    <div id="panel-welten" class="panel">
       <div id="welten-view"><!-- dynamisch --></div>
     </div>
 
@@ -1248,6 +1275,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
 
   if (name === 'welten') renderWelten();
+  if (name === 'dashboard') renderDashboard();
   if (name === 'quests') renderQuests();
   if (name === 'konzepte') renderKonzepte();
   if (name === 'antilib') renderAntiLib();
@@ -1732,9 +1760,9 @@ function setQuestFilter(f, btn) {
 
 function switchTabByName(name) {
   var btns = document.querySelectorAll('.tab-btn');
-  var names = ['welten','quests','konzepte','antilib','import','lesepläne','log','daten'];
+  var tabNames = ['dashboard','welten','quests','konzepte','antilib','sprints','probleme','queue','verfeinern','import','lesepläne','log','daten','integrationen'];
   for (var i = 0; i < btns.length; i++) {
-    if (names[i] === name) { switchTab(name, btns[i]); break; }
+    if (tabNames[i] === name) { switchTab(name, btns[i]); break; }
   }
 }
 
@@ -5226,6 +5254,147 @@ function queueUpdateBadge() {
 }
 
 
+/* ═══════════════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════════════ */
+function renderDashboard() {
+  var v = document.getElementById('dashboard-view');
+  if (!v) return;
+
+  var due = srDueItems();
+  var dueCount = due.length;
+  var today = srToday();
+
+  var html = '<div class="db-grid">';
+
+  // ── QUEUE PREVIEW (full width) ──
+  html += '<div class="db-section db-grid-full">';
+  html += '<div class="db-section-title">📬 QUEUE — HEUTE<a onclick="switchTabByName(\'queue\')">Alle ' + dueCount + ' fälligen →</a></div>';
+  if (!dueCount) {
+    html += '<div class="db-empty">Keine fälligen Einträge heute. Queue ist leer.</div>';
+  } else {
+    // Show first due item embedded
+    var first = due[0];
+    html += '<div class="queue-card" style="margin-bottom:0;">';
+    html += '<div class="queue-card-meta">';
+    html += '<span>' + esc(first.typ||'📦') + '</span>';
+    if (first.herkunft) html += '<span>' + esc(first.herkunft) + '</span>';
+    html += '<span>' + srIntervalLabel(first) + (first.srReviews ? ' · ' + first.srReviews + 'x' : ' · Neu') + '</span>';
+    html += '<span>Prio: ' + esc(first.prio||'mittel') + '</span>';
+    html += '</div>';
+    html += '<div class="queue-card-title">' + esc(first.titel) + '</div>';
+    if (first.warum) html += '<div class="queue-card-warum">' + esc(first.warum) + '</div>';
+    if (first.url) html += '<a href="' + esc(first.url) + '" target="_blank" class="btn btn-s btn-sm" style="display:inline-block;margin-bottom:10px;text-decoration:none;">🔗 Öffnen</a> ';
+    html += '<div class="queue-rating-row">';
+    html += '<button class="btn btn-sm" style="background:var(--red);color:var(--parchment);border-color:var(--red);font-family:var(--pixel);font-size:6px;padding:7px 9px;" onclick="dbQueueRate(\'' + first.id + '\',\'again\')">🔁 Nochmal</button>';
+    html += '<button class="btn btn-sm" style="background:var(--gold);color:var(--wood-dark);border-color:var(--wood-dark);font-family:var(--pixel);font-size:6px;padding:7px 9px;" onclick="dbQueueRate(\'' + first.id + '\',\'soon\')">📅 Bald</button>';
+    html += '<button class="btn btn-sm" style="background:var(--green);color:var(--parchment);border-color:var(--green-light);font-family:var(--pixel);font-size:6px;padding:7px 9px;" onclick="dbQueueRate(\'' + first.id + '\',\'gut\')">✓ Gut</button>';
+    html += '<button class="btn btn-sm" style="background:#2a6099;color:var(--parchment);border-color:#1a4070;font-family:var(--pixel);font-size:6px;padding:7px 9px;" onclick="dbQueueRate(\'' + first.id + '\',\'sehrgut\')">⭐ Sehr gut</button>';
+    html += '<button class="btn btn-sm" style="background:var(--parchment-dark);color:var(--ink-light);border-color:var(--parchment-shadow);font-family:var(--pixel);font-size:6px;padding:7px 9px;" onclick="dbQueueRate(\'' + first.id + '\',\'skip\')">⏭ Skip</button>';
+    html += '</div>';
+    if (dueCount > 1) html += '<div style="margin-top:8px;font-family:var(--pixel);font-size:5.5px;color:var(--ink-light);">+ ' + (dueCount-1) + ' weitere fällig</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // ── AKTIVER SPRINT ──
+  var aktivSprint = (S.sprints||[]).find(function(s){ return s.status === 'Aktiv'; });
+  html += '<div class="db-section">';
+  html += '<div class="db-section-title">⚔️ AKTIVER SPRINT<a onclick="switchTabByName(\'sprints\')">Alle Sprints →</a></div>';
+  if (!aktivSprint) {
+    html += '<div class="db-empty">Kein aktiver Sprint.</div>';
+  } else {
+    html += '<div style="font-family:var(--display);font-size:18px;font-weight:700;color:var(--ink);margin-bottom:6px;">' + esc(aktivSprint.titel) + '</div>';
+    if (aktivSprint.intention) html += '<div style="font-family:var(--display);font-size:15px;color:var(--ink-light);margin-bottom:8px;font-style:italic;">' + esc(aktivSprint.intention) + '</div>';
+    var schritte = (aktivSprint.schritte||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if (schritte.length) {
+      schritte.slice(0,5).forEach(function(s, i) {
+        html += '<div class="db-sprint-step">';
+        html += '<div style="width:16px;height:16px;border:2px solid var(--wood-dark);background:var(--parchment-dark);flex-shrink:0;margin-top:2px;"></div>';
+        html += '<div class="db-sprint-step-text">' + esc(s.replace(/^─\s*/,'')) + '</div>';
+        html += '</div>';
+      });
+      if (schritte.length > 5) html += '<div style="font-family:var(--pixel);font-size:5.5px;color:var(--ink-light);margin-top:4px;">+ ' + (schritte.length-5) + ' weitere Schritte</div>';
+    }
+  }
+  html += '</div>';
+
+  // ── OFFENE QUESTS ──
+  var offeneQuests = S.quests.filter(function(q){ return !q.done; }).slice(0,5);
+  html += '<div class="db-section">';
+  html += '<div class="db-section-title">⚔️ OFFENE QUESTS<a onclick="switchTabByName(\'quests\')">Alle →</a></div>';
+  if (!offeneQuests.length) {
+    html += '<div class="db-empty">Keine offenen Quests.</div>';
+  } else {
+    offeneQuests.forEach(function(q) {
+      var ort = q.ortId ? S.orte.find(function(o){ return o.id===q.ortId; }) : null;
+      html += '<div class="db-quest-item">';
+      html += '<div class="db-quest-check" onclick="toggleQuest(\'' + q.id + '\');renderDashboard();" style="width:14px;height:14px;border:2px solid var(--wood-dark);background:var(--parchment-dark);flex-shrink:0;cursor:pointer;"></div>';
+      html += '<div style="flex:1;"><div class="db-quest-name">' + esc(q.name) + '</div>';
+      if (ort) html += '<div class="db-quest-meta">' + esc(ort.titel) + '</div>';
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+
+  // ── FEYNMAN-PROBLEME ──
+  var aktivProbleme = (S.probleme||[]).filter(function(p){ return p.status !== 'dormant'; });
+  html += '<div class="db-section">';
+  html += '<div class="db-section-title">🔭 AKTIVE PROBLEME<a onclick="switchTabByName(\'probleme\')">Alle →</a></div>';
+  if (!aktivProbleme.length) {
+    html += '<div class="db-empty">Keine aktiven Feynman-Probleme.</div>';
+  } else {
+    aktivProbleme.slice(0,4).forEach(function(p) {
+      html += '<div class="db-problem">' + esc(p.frage) + '</div>';
+    });
+    if (aktivProbleme.length > 4) html += '<div style="font-family:var(--pixel);font-size:5.5px;color:var(--ink-light);margin-top:4px;">+ ' + (aktivProbleme.length-4) + ' weitere</div>';
+  }
+  html += '</div>';
+
+  // ── LETZTER LOG ──
+  var recentLog = (S.log||[]).slice().sort(function(a,b){ return b.datum.localeCompare(a.datum); }).slice(0,3);
+  html += '<div class="db-section">';
+  html += '<div class="db-section-title">✍️ LETZTER LOG<a onclick="switchTabByName(\'log\')">Alle →</a></div>';
+  if (!recentLog.length) {
+    html += '<div class="db-empty">Noch keine Log-Einträge.</div>';
+  } else {
+    recentLog.forEach(function(e) {
+      html += '<div class="db-log"><span style="color:var(--ink);font-weight:700;">' + esc(e.datum) + '</span> — ' + esc(e.inhalt.slice(0,80)) + (e.inhalt.length>80?'...':'') + '</div>';
+    });
+  }
+  html += '</div>';
+
+  // ── SCHNELL-AKTIONEN ──
+  html += '<div class="db-section db-grid-full">';
+  html += '<div class="db-section-title">⚡ SCHNELL-AKTIONEN</div>';
+  html += '<div class="db-quick-row">';
+  html += '<button class="btn btn-q btn-sm" onclick="openKonzeptModal()">+ Wissen</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openQuestModal()">+ Quest</button>';
+  html += '<button class="btn btn-s btn-sm" onclick="switchTabByName(\'log\');setTimeout(function(){document.getElementById(\'log-inhalt\').focus();},100)">✍️ Log-Eintrag</button>';
+  html += '<button class="btn btn-t btn-sm" onclick="switchTabByName(\'antilib\');setTimeout(openAlModal,100)">+ Anti-Library</button>';
+  html += '<button class="btn btn-sm" style="background:var(--parchment-dark);border:2px solid var(--parchment-shadow);font-family:var(--pixel);font-size:6px;padding:6px 10px;cursor:pointer;" onclick="openProblemModal()">+ Problem</button>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '</div>'; // /db-grid
+  v.innerHTML = html;
+}
+
+function dbQueueRate(itemId, rating) {
+  var item = S.antilib.find(function(a){ return a.id === itemId; });
+  if (!item) { renderDashboard(); return; }
+  queueUndoStack.push({
+    id: itemId, idx: 0,
+    srDue: item.srDue, srInterval: item.srInterval,
+    srLastReview: item.srLastReview, srReviews: item.srReviews
+  });
+  srUpdateItem(item, rating);
+  save();
+  queueUpdateBadge();
+  renderDashboard();
+}
+
+
 function esc(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -5236,6 +5405,7 @@ function esc(s) {
 ═══════════════════════════════════════════════════ */
 load();
 document.getElementById('log-datum').value = today();
+renderDashboard();
 renderWelten();
 renderQuests();
 renderKonzepte();
