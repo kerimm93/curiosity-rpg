@@ -314,6 +314,20 @@ select option { background:var(--parchment); }
 .sprint-aktiv { background:var(--gold); color:var(--wood-dark); border-color:var(--wood-dark); }
 .sprint-done { background:var(--green); color:var(--parchment); border-color:var(--green-light); }
 
+/* QUEUE / SPACED REPETITION */
+.queue-card { background:var(--parchment);border:3px solid var(--wood-dark);padding:20px 22px;margin-bottom:16px;position:relative; }
+.queue-card-title { font-family:var(--display);font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;line-height:1.3; }
+.queue-card-meta { font-family:var(--pixel);font-size:5.5px;color:var(--ink-light);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap; }
+.queue-card-warum { font-family:var(--display);font-size:17px;color:var(--ink-light);margin-bottom:14px;font-style:italic; }
+.queue-rating-row { display:flex;gap:8px;flex-wrap:wrap;margin-top:14px; }
+.queue-counter { font-family:var(--pixel);font-size:6px;color:var(--ink-light);text-align:center;margin-bottom:14px; }
+.queue-progress { height:6px;background:var(--parchment-shadow);margin-bottom:16px;border:1px solid var(--parchment-shadow); }
+.queue-progress-fill { height:100%;background:var(--green);transition:width 0.3s; }
+.sr-badge { display:inline-block;font-family:var(--pixel);font-size:5px;padding:2px 6px;border:2px solid;margin-left:6px; }
+.sr-due   { background:var(--green);color:var(--parchment);border-color:var(--green-light); }
+.sr-soon  { background:var(--gold);color:var(--wood-dark);border-color:var(--wood-dark); }
+.sr-later { background:var(--parchment-dark);color:var(--ink-light);border-color:var(--parchment-shadow); }
+
 /* INTEGRATION */
 .int-status { display:inline-block; padding:2px 8px; font-family:var(--pixel); font-size:6px; border:2px solid; margin-left:8px; }
 .int-ok   { background:var(--green);  color:var(--parchment); border-color:var(--green-light); }
@@ -363,6 +377,8 @@ select option { background:var(--parchment); }
     <button class="tab-btn" onclick="switchTab('konzepte',this)">③ Wissen</button>
     <button class="tab-btn" onclick="switchTab('antilib',this)">④ Anti-Library</button>
     <button class="tab-btn" onclick="switchTab('sprints',this)">⑤ Sprints</button>
+    <button class="tab-btn" onclick="switchTab('probleme',this)">🔭 Probleme</button>
+    <button class="tab-btn" id="tab-btn-queue" onclick="switchTab('queue',this)">📬 Queue</button>
     <button class="tab-btn" onclick="switchTab('verfeinern',this)">🔄 Verfeinern</button>
     <button class="tab-btn" onclick="switchTab('import',this)">⑥ Import & Prompts</button>
     <button class="tab-btn" onclick="switchTab('lesepläne',this)">⑦ Lesepläne</button>
@@ -401,6 +417,16 @@ select option { background:var(--parchment); }
         <button class="btn btn-m" onclick="openKonzeptTraining()">⚡ Training starten</button>
       </div>
       <div id="konzept-table-wrap"></div>
+    </div>
+
+    <!-- 🔭 PROBLEME -->
+    <div id="panel-probleme" class="panel">
+      <div id="probleme-view"></div>
+    </div>
+
+    <!-- 📬 QUEUE -->
+    <div id="panel-queue" class="panel">
+      <div id="queue-view"></div>
     </div>
 
     <!-- ④ ANTI-LIBRARY -->
@@ -875,6 +901,34 @@ select option { background:var(--parchment); }
   </div><!-- /panel-wrap -->
 </div><!-- /app -->
 
+<!-- MODAL: Problem -->
+<div class="modal-bg hidden" id="problem-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="pm-title">🔭 PROBLEM HINZUFÜGEN</div>
+    <label>FRAGESTELLUNG</label>
+    <input type="text" id="pm-frage" placeholder="Wie kann...? Warum ist...? Was ist der Zusammenhang zwischen...?">
+    <label>STATUS</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button class="fp active" id="pm-status-aktiv" onclick="pmSetStatus('aktiv',this)">🟢 Aktiv</button>
+      <button class="fp" id="pm-status-dormant" onclick="pmSetStatus('dormant',this)">💤 Dormant</button>
+    </div>
+    <input type="hidden" id="pm-status" value="aktiv">
+    <label>BESCHREIBUNG (optional)</label>
+    <textarea id="pm-desc" rows="3" placeholder="Was treibt diese Frage an? Welchen Kontext hat sie? Welche Teilfragen gehören dazu?"></textarea>
+    <label>VERKNÜPFTE WISSEN-EINTRÄGE</label>
+    <div style="position:relative;">
+      <input type="text" id="pm-wissen-search" placeholder="🔍 Wissen durchsuchen..." oninput="pmWissenSearch()" style="width:100%;font-family:var(--display);font-size:17px;background:#fdf6e3;border:2px solid var(--parchment-shadow);color:var(--ink);padding:7px 10px;">
+      <div id="pm-wissen-results" style="display:none;position:absolute;z-index:50;background:var(--parchment);border:2px solid var(--wood-dark);width:100%;max-height:160px;overflow-y:auto;box-shadow:3px 3px 0 var(--ink);"></div>
+    </div>
+    <div id="pm-wissen-selected" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+    <input type="hidden" id="pm-wissen-ids" value="">
+    <div class="btn-row">
+      <button class="btn btn-v" onclick="saveProblem()">✓ Speichern</button>
+      <button class="btn btn-d" onclick="closeModal('problem-modal')">✕ Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Welt -->
 <div class="modal-bg hidden" id="welt-modal">
   <div class="modal-box">
@@ -1126,6 +1180,7 @@ function load() {
   if (!S.quests) S.quests = [];
   if (!S.konzepte) S.konzepte = [];
   if (!S.wissenTypen) S.wissenTypen = [];
+  if (!S.probleme) S.probleme = [];
   if (!S.antilib) S.antilib = [];
   if (!S.log) S.log = [];
   if (!S.sprints) S.sprints = [];
@@ -1201,6 +1256,8 @@ function switchTab(name, btn) {
     if (zotEntries.length) setTimeout(zotSearch, 50);
   }
   if (name === 'verfeinern') renderVerfeinern();
+  if (name === 'probleme') renderProbleme();
+  if (name === 'queue') renderQueue();
   if (name === 'sprints') renderSprints();
   if (name === 'import') { populateNLMKonzeptSelect(); }
   if (name === 'log') renderLog();
@@ -3263,6 +3320,7 @@ function exportJSON() {
     quests: S.quests,
     konzepte: S.konzepte,
     wissenTypen: S.wissenTypen || [],
+    probleme: S.probleme || [],
     antilib: S.antilib,
     sprints: S.sprints || [],
     sprintTags: S.sprintTags || { aktionen:[], hilfsmittel:[] },
@@ -3290,6 +3348,7 @@ function importJSON(input) {
     S.quests   = data.quests   || [];
     S.konzepte = data.konzepte || [];
     S.wissenTypen = data.wissenTypen || [];
+    S.probleme = data.probleme || [];
     S.antilib  = data.antilib  || [];
     S.sprints    = data.sprints    || [];
     S.sprintTags = data.sprintTags || { aktionen:[], hilfsmittel:[] };
@@ -4779,6 +4838,394 @@ function gistAutoLoadOnStart() {
 }
 
 
+/* ═══════════════════════════════════════════════════
+   FEYNMAN-PROBLEME
+═══════════════════════════════════════════════════ */
+var pmSelectedWissen = [];
+
+function renderProbleme() {
+  var v = document.getElementById('probleme-view');
+  if (!v) return;
+  var html = '';
+
+  html += '<div class="btn-row" style="margin-bottom:14px;">';
+  html += '<button class="btn btn-q" onclick="openProblemModal()">+ Problem hinzufügen</button>';
+  html += '</div>';
+
+  if (!S.probleme.length) {
+    html += '<div class="empty-st">🔭 Noch keine Probleme. Feynman empfahl 12 offene Lieblingsfragen als Hintergrundfilter für alles was man liest.</div>';
+    v.innerHTML = html;
+    return;
+  }
+
+  // Split aktiv / dormant
+  var aktiv   = S.probleme.filter(function(p){ return p.status !== 'dormant'; });
+  var dormant = S.probleme.filter(function(p){ return p.status === 'dormant'; });
+
+  function renderGruppe(liste, label) {
+    if (!liste.length) return '';
+    var h = '<div style="font-family:var(--pixel);font-size:6.5px;color:var(--ink-light);margin:14px 0 8px 0;letter-spacing:1px;">' + label + '</div>';
+    liste.forEach(function(p) {
+      var wissenLinks = (p.wissenIds||[]).map(function(wid){
+        var k = S.konzepte.find(function(k){ return k.id===wid; });
+        return k ? '<span style="font-family:var(--pixel);font-size:5.5px;background:var(--parchment-dark);border:1px solid var(--parchment-shadow);padding:2px 5px;margin-right:3px;">' + wissenTypIcon(k.typ||'Begriff') + ' ' + esc(k.name) + '</span>' : '';
+      }).join('');
+      h += '<div class="qs" style="margin-bottom:10px;">';
+      h += '<div style="display:flex;align-items:flex-start;gap:10px;">';
+      h += '<div style="flex:1;">';
+      h += '<div style="font-family:var(--display);font-size:20px;font-weight:700;color:var(--ink);margin-bottom:4px;">' + esc(p.frage) + '</div>';
+      if (p.desc) h += '<div style="font-family:var(--display);font-size:16px;color:var(--ink-light);margin-bottom:6px;">' + esc(p.desc) + '</div>';
+      if (wissenLinks) h += '<div style="margin-bottom:6px;">' + wissenLinks + '</div>';
+      h += '</div>';
+      h += '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">';
+      h += '<button class="btn btn-sm btn-s" onclick="editProblem(\'' + p.id + '\')">✎</button>';
+      h += '<button class="btn btn-sm btn-d" onclick="delProblem(\'' + p.id + '\')">✕</button>';
+      if (p.status === 'dormant') h += '<button class="btn btn-sm btn-m" title="Aktivieren" onclick="toggleProblemStatus(\'' + p.id + '\')">▶</button>';
+      else h += '<button class="btn btn-sm" style="background:var(--parchment-dark);border:2px solid var(--parchment-shadow);font-family:var(--pixel);font-size:5.5px;padding:4px 6px;cursor:pointer;" title="Dormant setzen" onclick="toggleProblemStatus(\'' + p.id + '\')">💤</button>';
+      h += '</div>';
+      h += '</div>';
+      h += '</div>';
+    });
+    return h;
+  }
+
+  html += renderGruppe(aktiv, 'AKTIV — ' + aktiv.length + ' PROBLEM' + (aktiv.length!==1?'E':''));
+  html += renderGruppe(dormant, 'DORMANT — ' + dormant.length + ' PROBLEM' + (dormant.length!==1?'E':''));
+  v.innerHTML = html;
+}
+
+function openProblemModal(id) {
+  pmSelectedWissen = [];
+  document.getElementById('pm-frage').value = '';
+  document.getElementById('pm-desc').value = '';
+  document.getElementById('pm-status').value = 'aktiv';
+  document.getElementById('pm-wissen-search').value = '';
+  document.getElementById('pm-wissen-results').style.display = 'none';
+  document.getElementById('pm-wissen-selected').innerHTML = '';
+  document.getElementById('pm-wissen-ids').value = '';
+  document.querySelectorAll('#problem-modal .fp').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('pm-status-aktiv').classList.add('active');
+  document.getElementById('pm-title').textContent = '🔭 PROBLEM HINZUFÜGEN';
+
+  if (id) {
+    var p = S.probleme.find(function(x){ return x.id===id; });
+    if (p) {
+      document.getElementById('pm-title').textContent = '🔭 PROBLEM BEARBEITEN';
+      document.getElementById('pm-frage').value = p.frage || '';
+      document.getElementById('pm-desc').value = p.desc || '';
+      document.getElementById('pm-status').value = p.status || 'aktiv';
+      document.getElementById('pm-status-aktiv').classList.toggle('active', p.status !== 'dormant');
+      document.getElementById('pm-status-dormant').classList.toggle('active', p.status === 'dormant');
+      pmSelectedWissen = (p.wissenIds||[]).slice();
+      pmRenderSelectedWissen();
+    }
+    document.getElementById('problem-modal').dataset.editId = id;
+  } else {
+    delete document.getElementById('problem-modal').dataset.editId;
+  }
+  openModal('problem-modal');
+}
+
+function editProblem(id) { openProblemModal(id); }
+
+function pmSetStatus(status, btn) {
+  document.getElementById('pm-status').value = status;
+  document.querySelectorAll('#problem-modal .fp').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+}
+
+function pmWissenSearch() {
+  var q = document.getElementById('pm-wissen-search').value.toLowerCase().trim();
+  var res = document.getElementById('pm-wissen-results');
+  if (!q) { res.style.display = 'none'; return; }
+  var hits = S.konzepte.filter(function(k){
+    return (k.name||'').toLowerCase().includes(q) && pmSelectedWissen.indexOf(k.id) === -1;
+  }).slice(0,8);
+  if (!hits.length) { res.style.display = 'none'; return; }
+  res.innerHTML = hits.map(function(k){
+    return '<div onclick="pmAddWissen(\'' + k.id + '\')" style="padding:7px 10px;cursor:pointer;font-family:var(--display);font-size:17px;border-bottom:1px solid var(--parchment-shadow);">' + wissenTypIcon(k.typ||'Begriff') + ' ' + esc(k.name) + '</div>';
+  }).join('');
+  res.style.display = 'block';
+}
+
+function pmAddWissen(id) {
+  if (pmSelectedWissen.indexOf(id) === -1) pmSelectedWissen.push(id);
+  document.getElementById('pm-wissen-search').value = '';
+  document.getElementById('pm-wissen-results').style.display = 'none';
+  pmRenderSelectedWissen();
+}
+
+function pmRemoveWissen(id) {
+  pmSelectedWissen = pmSelectedWissen.filter(function(x){ return x !== id; });
+  pmRenderSelectedWissen();
+}
+
+function pmRenderSelectedWissen() {
+  var wrap = document.getElementById('pm-wissen-selected');
+  wrap.innerHTML = pmSelectedWissen.map(function(id){
+    var k = S.konzepte.find(function(x){ return x.id===id; });
+    if (!k) return '';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--parchment-dark);border:2px solid var(--parchment-shadow);padding:3px 8px;font-family:var(--display);font-size:15px;">' +
+      wissenTypIcon(k.typ||'Begriff') + ' ' + esc(k.name) +
+      '<span onclick="pmRemoveWissen(\'' + id + '\')" style="cursor:pointer;color:var(--red);font-weight:700;margin-left:2px;">✕</span></span>';
+  }).join('');
+  document.getElementById('pm-wissen-ids').value = pmSelectedWissen.join(',');
+}
+
+function saveProblem() {
+  var frage = document.getElementById('pm-frage').value.trim();
+  if (!frage) { toast('Fragestellung fehlt!'); return; }
+  var editId = document.getElementById('problem-modal').dataset.editId;
+  var data = {
+    frage: frage,
+    status: document.getElementById('pm-status').value || 'aktiv',
+    desc: document.getElementById('pm-desc').value.trim(),
+    wissenIds: pmSelectedWissen.slice(),
+    datum: todayDE()
+  };
+  if (editId) {
+    var idx = -1;
+    for (var i = 0; i < S.probleme.length; i++) { if (S.probleme[i].id === editId) { idx = i; break; } }
+    if (idx >= 0) { data.id = editId; data.datum = S.probleme[idx].datum; S.probleme[idx] = data; }
+  } else {
+    data.id = uid();
+    S.probleme.push(data);
+  }
+  save(); closeModal('problem-modal'); renderProbleme();
+  toast('🔭 Problem gespeichert!');
+}
+
+function delProblem(id) {
+  S.probleme = S.probleme.filter(function(p){ return p.id !== id; });
+  save(); renderProbleme();
+  toast('Problem gelöscht.');
+}
+
+function toggleProblemStatus(id) {
+  var p = S.probleme.find(function(x){ return x.id===id; });
+  if (p) { p.status = p.status === 'dormant' ? 'aktiv' : 'dormant'; }
+  save(); renderProbleme();
+}
+
+
+/* ═══════════════════════════════════════════════════
+   QUEUE / SPACED REPETITION
+═══════════════════════════════════════════════════ */
+
+// SR intervals in days
+var SR_INTERVALS = { skip: 1, again: 1, soon: 3, gut: null, sehrgut: null };
+// gut and sehrgut multiply current interval
+
+var queueSession = []; // current session items
+var queueIdx = 0;      // current card index
+
+function srToday() {
+  return new Date().toISOString().split('T')[0]; // YYYY-MM-DD for easy comparison
+}
+
+function srDueItems() {
+  var today = srToday();
+  return S.antilib.filter(function(a) {
+    if (a.status === 'Archiviert') return false;
+    if (!a.srDue) return true; // never reviewed = always due
+    return a.srDue <= today;
+  });
+}
+
+function srUpdateItem(item, rating) {
+  var today = srToday();
+  var interval = item.srInterval || 1;
+  var nextInterval;
+  var nextDue;
+
+  if (rating === 'skip') {
+    nextInterval = interval; // unchanged
+    nextDue = srAddDays(today, 1);
+  } else if (rating === 'again') {
+    nextInterval = 1;
+    nextDue = srAddDays(today, 1);
+  } else if (rating === 'soon') {
+    nextInterval = Math.min(3, interval);
+    nextDue = srAddDays(today, nextInterval);
+  } else if (rating === 'gut') {
+    nextInterval = Math.max(4, Math.round(interval * 2));
+    nextDue = srAddDays(today, nextInterval);
+  } else if (rating === 'sehrgut') {
+    nextInterval = Math.max(7, Math.round(interval * 2.5));
+    nextDue = srAddDays(today, nextInterval);
+  }
+
+  item.srInterval = nextInterval;
+  item.srDue = nextDue;
+  item.srLastReview = today;
+  item.srReviews = (item.srReviews || 0) + 1;
+}
+
+function srAddDays(dateStr, days) {
+  var d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function srIntervalLabel(item) {
+  if (!item.srDue) return 'Neu';
+  var today = srToday();
+  var diff = Math.round((new Date(item.srDue) - new Date(today)) / 86400000);
+  if (diff <= 0) return 'Fällig';
+  if (diff === 1) return 'Morgen';
+  return 'In ' + diff + ' Tagen';
+}
+
+function renderQueue() {
+  var v = document.getElementById('queue-view');
+  if (!v) return;
+
+  var due = srDueItems();
+  var total = due.length;
+  var allCount = S.antilib.filter(function(a){ return a.status !== 'Archiviert'; }).length;
+
+  // Update tab badge
+  var tabBtn = document.getElementById('tab-btn-queue');
+  if (tabBtn) {
+    tabBtn.textContent = '📬 Queue' + (total > 0 ? ' (' + total + ')' : '');
+  }
+
+  if (!total) {
+    v.innerHTML = '<div class="qs">' +
+      '<div class="qh"><span class="qi">📬</span> Queue</div>' +
+      '<div class="notice">Alle ' + allCount + ' Einträge sind erledigt für heute. Gute Arbeit.</div>' +
+      '<div class="btn-row" style="margin-top:12px;">' +
+      '<button class="btn btn-s" onclick="queueStartSession()">🔀 Trotzdem zufällig starten</button>' +
+      '</div></div>';
+    return;
+  }
+
+  // Start or resume session
+  if (!queueSession.length || queueIdx >= queueSession.length) {
+    queueSession = due.slice().sort(function(){ return Math.random() - 0.5; });
+    queueIdx = 0;
+  }
+
+  renderQueueCard(v);
+}
+
+function queueStartSession() {
+  var all = S.antilib.filter(function(a){ return a.status !== 'Archiviert'; });
+  queueSession = all.slice().sort(function(){ return Math.random() - 0.5; });
+  queueIdx = 0;
+  renderQueueCard(document.getElementById('queue-view'));
+}
+
+function renderQueueCard(v) {
+  if (queueIdx >= queueSession.length) {
+    v.innerHTML = '<div class="qs"><div class="qh"><span class="qi">✓</span> Session abgeschlossen</div>' +
+      '<div class="notice">' + queueSession.length + ' Karten bewertet. Morgen wieder.</div>' +
+      '<div class="btn-row" style="margin-top:12px;">' +
+      '<button class="btn btn-q" onclick="queueSession=[];queueIdx=0;renderQueue()">↩ Zurück zur Übersicht</button>' +
+      '</div></div>';
+    return;
+  }
+
+  var item = queueSession[queueIdx];
+  var remaining = queueSession.length - queueIdx;
+  var done = queueIdx;
+  var pct = Math.round((done / queueSession.length) * 100);
+
+  var html = '';
+
+  // Progress
+  html += '<div class="queue-counter">' + remaining + ' von ' + queueSession.length + ' verbleibend</div>';
+  html += '<div class="queue-progress"><div class="queue-progress-fill" style="width:' + pct + '%;"></div></div>';
+
+  // Card
+  html += '<div class="queue-card">';
+  html += '<div class="queue-card-meta">';
+  html += '<span>' + (item.typ||'📦') + '</span>';
+  if (item.herkunft) html += '<span>' + esc(item.herkunft) + '</span>';
+  html += '<span>' + srIntervalLabel(item) + (item.srReviews ? ' · ' + item.srReviews + 'x gesehen' : ' · Neu') + '</span>';
+  html += '<span>Priorität: ' + (item.prio||'mittel') + '</span>';
+  if (item.projekt) html += '<span>📁 ' + esc(item.projekt) + '</span>';
+  html += '</div>';
+
+  html += '<div class="queue-card-title">' + esc(item.titel) + '</div>';
+
+  if (item.warum) html += '<div class="queue-card-warum">' + esc(item.warum) + '</div>';
+  if (item.notizen) html += '<div style="font-family:var(--display);font-size:15px;color:var(--ink-light);margin-bottom:10px;">' + esc(item.notizen) + '</div>';
+
+  if (item.url) {
+    html += '<a href="' + esc(item.url) + '" target="_blank" class="btn btn-s btn-sm" style="display:inline-block;margin-bottom:4px;text-decoration:none;">🔗 Öffnen</a> ';
+  }
+
+  // Rating buttons
+  html += '<div class="queue-rating-row">';
+  html += '<button class="btn btn-sm" style="background:var(--red);color:var(--parchment);border-color:var(--red);font-family:var(--pixel);font-size:6px;padding:8px 10px;" onclick="queueRate(\'' + item.id + '\',\'again\')">🔁 Nochmal<br><span style="font-size:5px;opacity:0.8;">morgen</span></button>';
+  html += '<button class="btn btn-sm" style="background:var(--gold);color:var(--wood-dark);border-color:var(--wood-dark);font-family:var(--pixel);font-size:6px;padding:8px 10px;" onclick="queueRate(\'' + item.id + '\',\'soon\')">📅 Bald<br><span style="font-size:5px;opacity:0.8;">3 Tage</span></button>';
+  html += '<button class="btn btn-sm" style="background:var(--green);color:var(--parchment);border-color:var(--green-light);font-family:var(--pixel);font-size:6px;padding:8px 10px;" onclick="queueRate(\'' + item.id + '\',\'gut\')">✓ Gut<br><span style="font-size:5px;opacity:0.8;">×2</span></button>';
+  html += '<button class="btn btn-sm" style="background:#2a6099;color:var(--parchment);border-color:#1a4070;font-family:var(--pixel);font-size:6px;padding:8px 10px;" onclick="queueRate(\'' + item.id + '\',\'sehrgut\')">⭐ Sehr gut<br><span style="font-size:5px;opacity:0.8;">×2.5</span></button>';
+  html += '<button class="btn btn-sm" style="background:var(--parchment-dark);color:var(--ink-light);border-color:var(--parchment-shadow);font-family:var(--pixel);font-size:6px;padding:8px 10px;" onclick="queueRate(\'' + item.id + '\',\'skip\')">⏭ Skip<br><span style="font-size:5px;opacity:0.8;">morgen</span></button>';
+  html += '</div>';
+
+  html += '</div>';
+
+  // Undo last
+  if (queueIdx > 0) {
+    html += '<div style="margin-top:8px;"><button class="btn btn-sm btn-s" onclick="queueUndo()">↩ Letzte Bewertung rückgängig</button></div>';
+  }
+
+  v.innerHTML = html;
+}
+
+var queueUndoStack = []; // {id, srDue, srInterval, srLastReview, srReviews}
+
+function queueRate(itemId, rating) {
+  var item = S.antilib.find(function(a){ return a.id === itemId; });
+  if (!item) { queueIdx++; renderQueueCard(document.getElementById('queue-view')); return; }
+
+  // Save undo state
+  queueUndoStack.push({
+    id: itemId, idx: queueIdx,
+    srDue: item.srDue, srInterval: item.srInterval,
+    srLastReview: item.srLastReview, srReviews: item.srReviews
+  });
+
+  srUpdateItem(item, rating);
+  save();
+  queueIdx++;
+
+  // Update tab badge
+  var tabBtn = document.getElementById('tab-btn-queue');
+  if (tabBtn) {
+    var dueNow = srDueItems().length;
+    tabBtn.textContent = '📬 Queue' + (dueNow > 0 ? ' (' + dueNow + ')' : '');
+  }
+
+  renderQueueCard(document.getElementById('queue-view'));
+}
+
+function queueUndo() {
+  if (!queueUndoStack.length) return;
+  var state = queueUndoStack.pop();
+  var item = S.antilib.find(function(a){ return a.id === state.id; });
+  if (item) {
+    item.srDue = state.srDue;
+    item.srInterval = state.srInterval;
+    item.srLastReview = state.srLastReview;
+    item.srReviews = state.srReviews;
+  }
+  queueIdx = state.idx;
+  save();
+  renderQueueCard(document.getElementById('queue-view'));
+}
+
+// Show due count on tab button after load
+function queueUpdateBadge() {
+  var tabBtn = document.getElementById('tab-btn-queue');
+  if (!tabBtn) return;
+  var due = srDueItems().length;
+  tabBtn.textContent = '📬 Queue' + (due > 0 ? ' (' + due + ')' : '');
+}
+
+
 function esc(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -4796,6 +5243,7 @@ renderAntiLib();
 renderLog();
 updateStats();
 gistAutoLoadOnStart();
+queueUpdateBadge();
 </script>
 </body>
 </html>
