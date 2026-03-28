@@ -1017,6 +1017,46 @@ label { font-family:var(--body); font-size:11px; font-weight:700; color:var(--in
   </div>
 </div>
 
+<!-- MODAL: Kontinent -->
+<div class="modal-bg hidden" id="kontinent-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="km2-title">🗺️ KONTINENT HINZUFÜGEN</div>
+    <label>NAME</label>
+    <input type="text" id="km2-name" placeholder="z.B. Kritische Theorie, Anarchismus">
+    <label>WELT</label>
+    <select id="km2-welt" style="width:100%;"></select>
+    <label>ICON (Emoji)</label>
+    <input type="text" id="km2-icon" placeholder="🗺️" style="max-width:80px;">
+    <label>BESCHREIBUNG (optional)</label>
+    <textarea id="km2-desc" rows="2" placeholder="Strömung, Schule, Tradition..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-v" onclick="saveKontinent()">✓ Speichern</button>
+      <button class="btn btn-d" onclick="closeModal('kontinent-modal')">✕ Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Land -->
+<div class="modal-bg hidden" id="land-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="lm-title">🏛️ LAND HINZUFÜGEN</div>
+    <label>NAME</label>
+    <input type="text" id="lm-name" placeholder="z.B. Marx-Engels-Werke, Adornos Gesammelte Schriften">
+    <label>WELT</label>
+    <select id="lm-welt" style="width:100%;" onchange="lmUpdateKontinente()"></select>
+    <label>KONTINENT (optional)</label>
+    <select id="lm-kontinent" style="width:100%;"></select>
+    <label>ICON (Emoji)</label>
+    <input type="text" id="lm-icon" placeholder="🏛️" style="max-width:80px;">
+    <label>BESCHREIBUNG (optional)</label>
+    <textarea id="lm-desc" rows="2" placeholder="Werkkorpus, Sammlung, Reihe..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-v" onclick="saveLand()">✓ Speichern</button>
+      <button class="btn btn-d" onclick="closeModal('land-modal')">✕ Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Ort (Stadt/Dorf) -->
 <div class="modal-bg hidden" id="ort-modal">
   <div class="modal-box">
@@ -1024,14 +1064,18 @@ label { font-family:var(--body); font-size:11px; font-weight:700; color:var(--in
     <label>TYP</label>
     <select id="om-typ" style="width:100%;margin-bottom:4px;">
       <option value="Stadt">🏙️ Stadt (Buch)</option>
-      <option value="Dorf">🏘️ Dorf (Artikel / Essay)</option>
+      <option value="Dorf">🏘️ Dorf (Artikel / Essay / Podcast)</option>
     </select>
     <label>TITEL</label>
     <input type="text" id="om-titel" placeholder="z.B. Das Kapital, Der Engel der Geschichte">
     <label>AUTOR / QUELLE</label>
     <input type="text" id="om-autor" placeholder="z.B. Karl Marx, Walter Benjamin">
     <label>WELT</label>
-    <select id="om-welt" style="width:100%;margin-bottom:4px;"></select>
+    <select id="om-welt" style="width:100%;" onchange="omUpdateKontinente()"></select>
+    <label>KONTINENT (optional)</label>
+    <select id="om-kontinent" style="width:100%;" onchange="omUpdateLaender()"></select>
+    <label>LAND (optional — nur für Städte)</label>
+    <select id="om-land" style="width:100%;"></select>
     <label>ICON (Emoji)</label>
     <input type="text" id="om-icon" placeholder="📖" style="max-width:80px;">
     <label>BESCHREIBUNG (optional)</label>
@@ -1247,6 +1291,8 @@ function load() {
     if (d) S = JSON.parse(d);
   } catch(e) {}
   if (!S.welten) S.welten = [];
+  if (!S.kontinente) S.kontinente = [];
+  if (!S.laender) S.laender = [];
   if (!S.orte) S.orte = [];
   if (!S.quests) S.quests = [];
   if (!S.konzepte) S.konzepte = [];
@@ -1353,9 +1399,11 @@ function renderWelten() {
 
 function renderWeltenList(v) {
   var html = '';
-  html += '<div class="btn-row" style="margin-bottom:14px;">';
-  html += '<button class="btn btn-q" onclick="openWeltModal()">+ Neue Welt</button>';
-  html += '<button class="btn btn-s" onclick="openOrtModal()">+ Neuen Ort</button>';
+  html += '<div class="btn-row" style="margin-bottom:14px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-q" onclick="openWeltModal()">+ Welt</button>';
+  html += '<button class="btn btn-s btn-sm" onclick="openKontinentModal()">+ Kontinent</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openLandModal()">+ Land</button>';
+  html += '<button class="btn btn-t btn-sm" onclick="openOrtModal()">+ Ort</button>';
   html += '</div>';
 
   if (!S.welten.length) {
@@ -1364,62 +1412,98 @@ function renderWeltenList(v) {
     return;
   }
 
-  // Ungrouped orte (no welt or welt not found)
-  S.welten.forEach(function(welt) {
-    html += '<div class="phase-header">' + (welt.icon||'🌍') + ' ' + welt.name;
-    if (welt.desc) html += ' <span style="font-family:var(--body);font-size:13px;color:var(--parchment-dark);font-weight:normal;">' + welt.desc + '</span>';
-    html += '<div style="margin-left:auto;display:flex;gap:4px;flex-shrink:0;">';
-    html += '<button onclick="event.stopPropagation();openWeltModal(\'' + welt.id + '\')" style="font-family:var(--body);font-weight:700;font-size:11px;padding:4px 8px;background:rgba(0,0,0,0.25);color:var(--parchment);border:1px solid var(--border);cursor:pointer;">✏️</button>';
-    html += '<button onclick="event.stopPropagation();delWelt(\'' + welt.id + '\')" style="font-family:var(--body);font-weight:700;font-size:11px;padding:4px 8px;background:rgba(0,0,0,0.3);color:var(--parchment);border:1px solid var(--border);cursor:pointer;">✕</button>';
-    html += '</div>';
-    html += '</div>';
-
-    var orte = S.orte.filter(function(o){ return o.weltId === welt.id; });
-    if (!orte.length) {
-      html += '<div style="font-family:var(--body);font-size:15px;color:var(--parchment-shadow);padding:10px 14px;margin-bottom:10px;">Noch keine Orte in dieser Welt.</div>';
-    } else {
-      html += '<div class="card-grid" style="margin-bottom:16px;">';
-      orte.forEach(function(ort) {
-        var qTotal = S.quests.filter(function(q){ return q.ortId === ort.id; }).length;
-        var qDone = S.quests.filter(function(q){ return q.ortId === ort.id && q.done; }).length;
-        var pct = qTotal ? Math.round(qDone/qTotal*100) : 0;
-        html += '<div class="card" onclick="navOrt(\'' + ort.id + '\')">';
-        html += '<button class="card-del" onclick="event.stopPropagation();delOrt(\'' + ort.id + '\')">✕</button>';
-        html += '<span class="card-icon">' + (ort.icon||'📖') + '</span>';
-        html += '<div class="card-title">' + esc(ort.titel) + '</div>';
-        if (ort.autor) html += '<div style="font-family:var(--body);font-weight:700;font-size:11px;color:var(--ink-light);">von ' + esc(ort.autor) + '</div>';
-        html += '<span class="card-badge" style="background:' + ortTypColor(ort.typ) + ';color:var(--parchment);border-color:var(--ink);">' + (ort.typ==='Stadt'?'🏙️ Stadt':'🏘️ Dorf') + '</span>';
-        if (qTotal > 0) {
-          html += '<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:' + pct + '%;"></div></div>';
-          html += '<div class="prog-lbl">' + qDone + '/' + qTotal + ' Quests · ' + pct + '%</div></div>';
-        }
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-  });
-
-  // Orte ohne Welt
-  var ortOhneWelt = S.orte.filter(function(o){ return !o.weltId || !S.welten.find(function(w){ return w.id === o.weltId; }); });
-  if (ortOhneWelt.length) {
-    html += '<div class="phase-header">📦 Ohne Welt</div>';
-    html += '<div class="card-grid" style="margin-bottom:16px;">';
-    ortOhneWelt.forEach(function(ort) {
+  function renderOrteCards(orte) {
+    var h = '<div class="card-grid" style="margin-bottom:12px;">';
+    orte.forEach(function(ort) {
       var qTotal = S.quests.filter(function(q){ return q.ortId === ort.id; }).length;
       var qDone = S.quests.filter(function(q){ return q.ortId === ort.id && q.done; }).length;
       var pct = qTotal ? Math.round(qDone/qTotal*100) : 0;
-      html += '<div class="card" onclick="navOrt(\'' + ort.id + '\')">';
-      html += '<button class="card-del" onclick="event.stopPropagation();delOrt(\'' + ort.id + '\')">✕</button>';
-      html += '<span class="card-icon">' + (ort.icon||'📖') + '</span>';
-      html += '<div class="card-title">' + esc(ort.titel) + '</div>';
-      html += '<span class="card-badge" style="background:' + ortTypColor(ort.typ) + ';color:var(--parchment);border-color:var(--ink);">' + (ort.typ==='Stadt'?'🏙️ Stadt':'🏘️ Dorf') + '</span>';
+      h += '<div class="card" onclick="navOrt(\'' + ort.id + '\')">';
+      h += '<button class="card-del" onclick="event.stopPropagation();delOrt(\'' + ort.id + '\')">✕</button>';
+      h += '<span class="card-icon">' + (ort.icon||'📖') + '</span>';
+      h += '<div class="card-title">' + esc(ort.titel) + '</div>';
+      if (ort.autor) h += '<div style="font-family:var(--body);font-weight:600;font-size:11px;color:var(--ink-light);">von ' + esc(ort.autor) + '</div>';
+      h += '<span class="card-badge" style="background:' + ortTypColor(ort.typ) + ';color:white;">' + (ort.typ==='Stadt'?'🏙️ Stadt':'🏘️ Dorf') + '</span>';
       if (qTotal > 0) {
-        html += '<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:' + pct + '%;"></div></div>';
-        html += '<div class="prog-lbl">' + qDone + '/' + qTotal + ' Quests · ' + pct + '%</div></div>';
+        h += '<div class="prog-wrap"><div class="prog-track"><div class="prog-fill" style="width:' + pct + '%;"></div></div>';
+        h += '<div class="prog-lbl">' + qDone + '/' + qTotal + ' · ' + pct + '%</div></div>';
       }
-      html += '</div>';
+      h += '</div>';
     });
-    html += '</div>';
+    h += '</div>';
+    return h;
+  }
+
+  S.welten.forEach(function(welt) {
+    // Welt header
+    html += '<div class="phase-header">' + (welt.icon||'🌍') + ' ' + esc(welt.name);
+    if (welt.desc) html += ' <span style="font-size:13px;color:var(--ink-light);font-weight:normal;">' + esc(welt.desc) + '</span>';
+    html += '<div style="margin-left:auto;display:flex;gap:4px;flex-shrink:0;">';
+    html += '<button onclick="event.stopPropagation();openKontinentModal()" title="Kontinent hinzufügen" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">+🗺️</button>';
+    html += '<button onclick="event.stopPropagation();openWeltModal(\'' + welt.id + '\')" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
+    html += '<button onclick="event.stopPropagation();delWelt(\'' + welt.id + '\')" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
+    html += '</div></div>';
+
+    // Kontinente dieser Welt
+    var weltsKontinente = S.kontinente.filter(function(k){ return k.weltId === welt.id; });
+
+    weltsKontinente.forEach(function(kont) {
+      html += '<div style="margin:8px 0 4px 16px;padding:8px 12px;background:var(--surface);border-left:3px solid var(--purple);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:16px;">' + (kont.icon||'🗺️') + '</span>';
+      html += '<span style="font-family:var(--body);font-weight:700;font-size:14px;color:var(--purple-light);">' + esc(kont.name) + '</span>';
+      if (kont.desc) html += '<span style="font-size:12px;color:var(--ink-dim);">' + esc(kont.desc) + '</span>';
+      html += '<div style="margin-left:auto;display:flex;gap:4px;">';
+      html += '<button onclick="openLandModal()" title="Land hinzufügen" style="font-size:12px;padding:3px 7px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">+🏛️</button>';
+      html += '<button onclick="openKontinentModal(\'' + kont.id + '\')" style="font-size:12px;padding:3px 7px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
+      html += '<button onclick="delKontinent(\'' + kont.id + '\')" style="font-size:12px;padding:3px 7px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
+      html += '</div></div>';
+
+      // Länder dieses Kontinents
+      var kontLaender = S.laender.filter(function(l){ return l.kontinentId === kont.id; });
+      kontLaender.forEach(function(land) {
+        html += '<div style="margin:4px 0 4px 32px;padding:6px 12px;background:var(--surface-2);border-left:3px solid var(--teal);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
+        html += '<span style="font-size:14px;">' + (land.icon||'🏛️') + '</span>';
+        html += '<span style="font-family:var(--body);font-weight:700;font-size:13px;color:var(--teal);">' + esc(land.name) + '</span>';
+        html += '<div style="margin-left:auto;display:flex;gap:4px;">';
+        html += '<button onclick="openLandModal(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
+        html += '<button onclick="delLand(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
+        html += '</div></div>';
+        // Orte dieses Landes
+        var landOrte = S.orte.filter(function(o){ return o.landId === land.id; });
+        if (landOrte.length) html += '<div style="margin-left:48px;">' + renderOrteCards(landOrte) + '</div>';
+      });
+
+      // Orte direkt im Kontinent (kein Land)
+      var kontOrteOhneLand = S.orte.filter(function(o){ return o.kontinentId === kont.id && !o.landId; });
+      if (kontOrteOhneLand.length) html += '<div style="margin-left:32px;">' + renderOrteCards(kontOrteOhneLand) + '</div>';
+    });
+
+    // Länder ohne Kontinent in dieser Welt
+    var weltLaenderOhneKont = S.laender.filter(function(l){ return l.weltId===welt.id && !l.kontinentId; });
+    weltLaenderOhneKont.forEach(function(land) {
+      html += '<div style="margin:4px 0 4px 16px;padding:6px 12px;background:var(--surface-2);border-left:3px solid var(--teal);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:14px;">' + (land.icon||'🏛️') + '</span>';
+      html += '<span style="font-family:var(--body);font-weight:700;font-size:13px;color:var(--teal);">' + esc(land.name) + '</span>';
+      html += '<div style="margin-left:auto;display:flex;gap:4px;">';
+      html += '<button onclick="openLandModal(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
+      html += '<button onclick="delLand(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
+      html += '</div></div>';
+      var landOrte = S.orte.filter(function(o){ return o.landId===land.id; });
+      if (landOrte.length) html += '<div style="margin-left:32px;">' + renderOrteCards(landOrte) + '</div>';
+    });
+
+    // Orte direkt in Welt (kein Kontinent, kein Land)
+    var weltOrteOhneKont = S.orte.filter(function(o){ return o.weltId===welt.id && !o.kontinentId && !o.landId; });
+    if (weltOrteOhneKont.length) html += '<div style="margin-left:16px;">' + renderOrteCards(weltOrteOhneKont) + '</div>';
+
+    html += '<div style="margin-bottom:20px;"></div>';
+  });
+
+  // Orte ohne Zuordnung
+  var orteOhneAlles = S.orte.filter(function(o){ return !o.weltId || !S.welten.find(function(w){ return w.id===o.weltId; }); });
+  if (orteOhneAlles.length) {
+    html += '<div class="phase-header">📦 Ohne Zuordnung</div>';
+    html += renderOrteCards(orteOhneAlles);
   }
 
   v.innerHTML = html;
@@ -1571,6 +1655,8 @@ var editingOrtId = null;
 function openOrtModal(weltId) {
   editingOrtId = null;
   populateWeltSelect('om-welt', weltId||null);
+  omUpdateKontinente();
+  omUpdateLaender();
   document.getElementById('om-titel').value = '';
   document.getElementById('om-autor').value = '';
   document.getElementById('om-icon').value = '📖';
@@ -1584,8 +1670,39 @@ function openOrtModalFromCurrentWelt() {
   openOrtModal(currentWeltId);
 }
 
+function omUpdateKontinente() {
+  var weltId = document.getElementById('om-welt') ? document.getElementById('om-welt').value : '';
+  var sel = document.getElementById('om-kontinent');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Kein Kontinent —</option>';
+  S.kontinente.filter(function(k){ return !weltId || k.weltId === weltId; }).forEach(function(k) {
+    var opt = document.createElement('option');
+    opt.value = k.id; opt.textContent = (k.icon||'🗺️') + ' ' + k.name;
+    sel.appendChild(opt);
+  });
+  omUpdateLaender();
+}
+
+function omUpdateLaender() {
+  var kontinentId = document.getElementById('om-kontinent') ? document.getElementById('om-kontinent').value : '';
+  var weltId = document.getElementById('om-welt') ? document.getElementById('om-welt').value : '';
+  var sel = document.getElementById('om-land');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Kein Land —</option>';
+  S.laender.filter(function(l){
+    if (kontinentId) return l.kontinentId === kontinentId;
+    if (weltId) return l.weltId === weltId;
+    return true;
+  }).forEach(function(l) {
+    var opt = document.createElement('option');
+    opt.value = l.id; opt.textContent = (l.icon||'🏛️') + ' ' + l.name;
+    sel.appendChild(opt);
+  });
+}
+
 function populateWeltSelect(selId, selectedId) {
   var sel = document.getElementById(selId);
+  if (!sel) return;
   sel.innerHTML = '<option value="">— Keine Welt —</option>';
   S.welten.forEach(function(w) {
     var opt = document.createElement('option');
@@ -1598,12 +1715,17 @@ function populateWeltSelect(selId, selectedId) {
 function saveOrt() {
   var titel = document.getElementById('om-titel').value.trim();
   if (!titel) { toast('Titel fehlt!'); return; }
+  var weltId = document.getElementById('om-welt').value || null;
+  var kontinentId = document.getElementById('om-kontinent').value || null;
+  var landId = document.getElementById('om-land').value || null;
   var ort = {
     id: editingOrtId || uid(),
     typ: document.getElementById('om-typ').value,
     titel: titel,
     autor: document.getElementById('om-autor').value.trim(),
-    weltId: document.getElementById('om-welt').value || null,
+    weltId: weltId,
+    kontinentId: kontinentId,
+    landId: landId,
     icon: document.getElementById('om-icon').value || '📖',
     desc: document.getElementById('om-desc').value.trim(),
     url: document.getElementById('om-url').value.trim(),
@@ -1619,6 +1741,119 @@ function saveOrt() {
   if (weltenView === 'list') renderWelten();
   toast('🏙️ Ort gespeichert!');
 }
+
+// ── KONTINENT ──
+function openKontinentModal(id) {
+  populateWeltSelect('km2-welt', null);
+  document.getElementById('km2-name').value = '';
+  document.getElementById('km2-icon').value = '🗺️';
+  document.getElementById('km2-desc').value = '';
+  document.getElementById('km2-title').textContent = id ? '🗺️ KONTINENT BEARBEITEN' : '🗺️ KONTINENT HINZUFÜGEN';
+  if (id) {
+    var k = S.kontinente.find(function(x){ return x.id===id; });
+    if (k) {
+      document.getElementById('km2-name').value = k.name||'';
+      document.getElementById('km2-icon').value = k.icon||'🗺️';
+      document.getElementById('km2-desc').value = k.desc||'';
+      populateWeltSelect('km2-welt', k.weltId);
+    }
+  }
+  document.getElementById('kontinent-modal').dataset.editId = id||'';
+  openModal('kontinent-modal');
+}
+
+function saveKontinent() {
+  var name = document.getElementById('km2-name').value.trim();
+  if (!name) { toast('Name fehlt!'); return; }
+  var editId = document.getElementById('kontinent-modal').dataset.editId;
+  var data = {
+    name: name, weltId: document.getElementById('km2-welt').value||null,
+    icon: document.getElementById('km2-icon').value||'🗺️',
+    desc: document.getElementById('km2-desc').value.trim()
+  };
+  if (editId) {
+    var ex = S.kontinente.find(function(x){ return x.id===editId; });
+    if (ex) Object.assign(ex, data);
+  } else {
+    data.id = uid();
+    S.kontinente.push(data);
+  }
+  save(); closeModal('kontinent-modal'); renderWelten();
+  toast('🗺️ Kontinent gespeichert!');
+}
+
+function delKontinent(id) {
+  if (!confirm('Kontinent löschen? Länder und Orte bleiben erhalten.')) return;
+  S.kontinente = S.kontinente.filter(function(k){ return k.id!==id; });
+  S.laender.forEach(function(l){ if(l.kontinentId===id) l.kontinentId=null; });
+  S.orte.forEach(function(o){ if(o.kontinentId===id) o.kontinentId=null; });
+  save(); renderWelten(); toast('🗺️ Kontinent gelöscht.');
+}
+
+// ── LAND ──
+function openLandModal(id) {
+  populateWeltSelect('lm-welt', null);
+  lmUpdateKontinente();
+  document.getElementById('lm-name').value = '';
+  document.getElementById('lm-icon').value = '🏛️';
+  document.getElementById('lm-desc').value = '';
+  document.getElementById('lm-title').textContent = id ? '🏛️ LAND BEARBEITEN' : '🏛️ LAND HINZUFÜGEN';
+  if (id) {
+    var l = S.laender.find(function(x){ return x.id===id; });
+    if (l) {
+      document.getElementById('lm-name').value = l.name||'';
+      document.getElementById('lm-icon').value = l.icon||'🏛️';
+      document.getElementById('lm-desc').value = l.desc||'';
+      populateWeltSelect('lm-welt', l.weltId);
+      lmUpdateKontinente(l.kontinentId);
+    }
+  }
+  document.getElementById('land-modal').dataset.editId = id||'';
+  openModal('land-modal');
+}
+
+function lmUpdateKontinente(selectedId) {
+  var weltId = document.getElementById('lm-welt') ? document.getElementById('lm-welt').value : '';
+  var sel = document.getElementById('lm-kontinent');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Kein Kontinent —</option>';
+  S.kontinente.filter(function(k){ return !weltId || k.weltId===weltId; }).forEach(function(k) {
+    var opt = document.createElement('option');
+    opt.value = k.id; opt.textContent = (k.icon||'🗺️') + ' ' + k.name;
+    if (k.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function saveLand() {
+  var name = document.getElementById('lm-name').value.trim();
+  if (!name) { toast('Name fehlt!'); return; }
+  var editId = document.getElementById('land-modal').dataset.editId;
+  var data = {
+    name: name, weltId: document.getElementById('lm-welt').value||null,
+    kontinentId: document.getElementById('lm-kontinent').value||null,
+    icon: document.getElementById('lm-icon').value||'🏛️',
+    desc: document.getElementById('lm-desc').value.trim()
+  };
+  if (editId) {
+    var ex = S.laender.find(function(x){ return x.id===editId; });
+    if (ex) Object.assign(ex, data);
+  } else {
+    data.id = uid();
+    S.laender.push(data);
+  }
+  save(); closeModal('land-modal'); renderWelten();
+  toast('🏛️ Land gespeichert!');
+}
+
+function delLand(id) {
+  if (!confirm('Land löschen? Orte bleiben erhalten.')) return;
+  S.laender = S.laender.filter(function(l){ return l.id!==id; });
+  S.orte.forEach(function(o){ if(o.landId===id) o.landId=null; });
+  save(); renderWelten(); toast('🏛️ Land gelöscht.');
+}
+
+
 
 function delOrt(id) {
   if (!confirm('Ort löschen? Alle Quests dieses Orts werden ebenfalls gelöscht.')) return;
@@ -3389,6 +3624,8 @@ function exportJSON() {
     version: 1,
     exported: new Date().toISOString(),
     welten: S.welten,
+    kontinente: S.kontinente || [],
+    laender: S.laender || [],
     orte: S.orte,
     quests: S.quests,
     konzepte: S.konzepte,
@@ -3416,13 +3653,15 @@ function importJSON(input) {
     var data;
     try { data = JSON.parse(raw); } catch(err) { toast('JSON-Fehler: ' + err.message.slice(0,60)); return; }
     if (!data || typeof data !== 'object') { toast('Ungültige Datei.'); return; }
-    S.welten   = data.welten   || [];
-    S.orte     = data.orte     || [];
-    S.quests   = data.quests   || [];
-    S.konzepte = data.konzepte || [];
+    S.welten     = data.welten     || [];
+    S.kontinente = data.kontinente || [];
+    S.laender    = data.laender    || [];
+    S.orte       = data.orte       || [];
+    S.quests     = data.quests     || [];
+    S.konzepte   = data.konzepte   || [];
     S.wissenTypen = data.wissenTypen || [];
-    S.probleme = data.probleme || [];
-    S.antilib  = data.antilib  || [];
+    S.probleme   = data.probleme   || [];
+    S.antilib    = data.antilib    || [];
     S.sprints    = data.sprints    || [];
     S.sprintTags = data.sprintTags || { aktionen:[], hilfsmittel:[] };
     if (data.integrations) S.integrations = data.integrations;
@@ -3444,7 +3683,7 @@ function mergeJSON(input) {
     try { data = JSON.parse(raw); } catch(err) { toast('JSON-Fehler: ' + err.message.slice(0,60)); return; }
     if (!data || typeof data !== 'object') { toast('Ungültige Datei.'); return; }
 
-    var counts = { welten:0, orte:0, quests:0, konzepte:0, antilib:0, sprints:0, log:0 };
+    var counts = { welten:0, kontinente:0, laender:0, orte:0, quests:0, konzepte:0, antilib:0, sprints:0, log:0 };
 
     function mergeArr(local, incoming, key) {
       var existingIds = {};
@@ -3456,8 +3695,10 @@ function mergeJSON(input) {
       return added;
     }
 
-    counts.welten   = mergeArr(S.welten,   data.welten);
-    counts.orte     = mergeArr(S.orte,     data.orte);
+    counts.welten    = mergeArr(S.welten,    data.welten);
+    counts.kontinente= mergeArr(S.kontinente, data.kontinente);
+    counts.laender   = mergeArr(S.laender,   data.laender);
+    counts.orte      = mergeArr(S.orte,      data.orte);
     counts.quests   = mergeArr(S.quests,   data.quests);
     counts.konzepte = mergeArr(S.konzepte, data.konzepte);
     counts.antilib  = mergeArr(S.antilib,  data.antilib);
@@ -4722,7 +4963,7 @@ function gistBuildPayload() {
   return {
     version: 2,
     exported: new Date().toISOString(),
-    welten: S.welten, orte: S.orte, quests: S.quests,
+    welten: S.welten, kontinente: S.kontinente||[], laender: S.laender||[], orte: S.orte, quests: S.quests,
     konzepte: S.konzepte, wissenTypen: S.wissenTypen || [],
     antilib: S.antilib, sprints: S.sprints || [],
     sprintTags: S.sprintTags || { aktionen:[], hilfsmittel:[] },
