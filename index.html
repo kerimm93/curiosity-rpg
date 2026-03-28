@@ -1093,21 +1093,26 @@ label { font-family:var(--body); font-size:11px; font-weight:700; color:var(--in
 <div class="modal-bg hidden" id="quest-modal">
   <div class="modal-box">
     <div class="modal-title" id="quest-modal-title">⚔️ QUEST HINZUFÜGEN</div>
-    <label>NAME DER QUEST</label>
-    <input type="text" id="qm-name" placeholder="z.B. Kapitel 1: Die Ware, Drei Artikel zu X lesen">
+    <label>NAME</label>
+    <input type="text" id="qm-name" placeholder="z.B. Kapitel 1: Die Ware, Abschnitt 2.3">
     <label>TYP</label>
-    <select id="qm-typ" style="width:100%;margin-bottom:4px;">
+    <select id="qm-typ" style="width:100%;">
+      <option value="Abschnitt">📂 Abschnitt (Container)</option>
       <option value="Kapitel">📖 Kapitel</option>
-      <option value="Frei">⚔️ Freie Quest</option>
+      <option value="Unterkapitel">📄 Unterkapitel</option>
+      <option value="Aufgabe">⚔️ Aufgabe</option>
       <option value="Artikel">📰 Artikel lesen</option>
       <option value="Recherche">🔬 Recherche</option>
+      <option value="Frei">✨ Frei</option>
     </select>
-    <label>ORT (optional — Buch oder Artikel aus Welten)</label>
-    <select id="qm-ort" style="width:100%;margin-bottom:4px;"></select>
+    <label>ORT (optional)</label>
+    <select id="qm-ort" style="width:100%;" onchange="qmUpdateParents()"></select>
+    <label>ÜBERGEORDNETE QUEST (optional — für Verschachtelung)</label>
+    <select id="qm-parent" style="width:100%;"></select>
     <label>BESCHREIBUNG (optional)</label>
     <textarea id="qm-desc" rows="2" placeholder="Was ist das Ziel dieser Quest?"></textarea>
     <label>RESSOURCEN-LINKS (kommagetrennt)</label>
-    <textarea id="qm-links" rows="2" placeholder="https://read.readwise.io/..., https://notebooklm.google.com/..."></textarea>
+    <textarea id="qm-links" rows="2" placeholder="https://read.readwise.io/..."></textarea>
     <label>AUS ANTI-LIBRARY VERKNÜPFEN (optional)</label>
     <div style="position:relative;">
       <input type="text" id="qm-al-search" placeholder="🔍 Anti-Library durchsuchen..." oninput="qmAlSearch()" style="width:100%;font-family:var(--body);font-size:15px;background:var(--surface);border:1px solid var(--border);color:var(--ink);padding:7px 10px;">
@@ -1387,12 +1392,14 @@ function switchTab(name, btn) {
    ① WELTEN
 ═══════════════════════════════════════════════════ */
 var weltenView = 'list'; // 'list' | 'ort' | 'welten-detail'
+var weltenTableView = false;
 var currentWeltId = null;
 var currentOrtId = null;
 
 function renderWelten() {
   var v = document.getElementById('welten-view');
-  if (weltenView === 'list') renderWeltenList(v);
+  if (weltenView === 'list' && weltenTableView) renderWeltenTable(v);
+  else if (weltenView === 'list') renderWeltenList(v);
   else if (weltenView === 'welten-detail') renderWeltDetail(v);
   else if (weltenView === 'ort') renderOrtDetail(v);
 }
@@ -1404,6 +1411,7 @@ function renderWeltenList(v) {
   html += '<button class="btn btn-s btn-sm" onclick="openKontinentModal()">+ Kontinent</button>';
   html += '<button class="btn btn-m btn-sm" onclick="openLandModal()">+ Land</button>';
   html += '<button class="btn btn-t btn-sm" onclick="openOrtModal()">+ Ort</button>';
+  html += '<button class="btn btn-sm" style="margin-left:auto;background:var(--surface-3);border:1px solid var(--border);color:var(--ink-light);" onclick="weltenTableView=!weltenTableView;renderWelten();">' + (weltenTableView ? '🗺️ Karten' : '📋 Tabelle') + '</button>';
   html += '</div>';
 
   if (!S.welten.length) {
@@ -1523,78 +1531,126 @@ function renderOrtDetail(v) {
   var ort = S.orte.find(function(o){ return o.id === currentOrtId; });
   if (!ort) { weltenView = 'list'; renderWelten(); return; }
   var welt = S.welten.find(function(w){ return w.id === ort.weltId; });
-  var quests = S.quests.filter(function(q){ return q.ortId === ort.id; });
-  var done = quests.filter(function(q){ return q.done; }).length;
-  var pct = quests.length ? Math.round(done/quests.length*100) : 0;
+
+  // Count all quests (including nested) for this ort
+  var allQuests = S.quests.filter(function(q){ return q.ortId === ort.id; });
+  var done = allQuests.filter(function(q){ return q.done && !q.parentId; }).length +
+             allQuests.filter(function(q){ return q.done && q.parentId; }).length;
+  var pct = allQuests.length ? Math.round(done/allQuests.length*100) : 0;
 
   var html = '';
   html += '<div class="breadcrumb">';
   html += '<a onclick="navBack()">← Welten</a>';
-  if (welt) html += '<span>›</span><span>' + welt.name + '</span>';
+  if (welt) html += '<span>›</span><span>' + esc(welt.name) + '</span>';
   html += '<span>›</span><span>' + esc(ort.titel) + '</span>';
   html += '</div>';
 
   html += '<div class="detail-header">';
   html += '<div class="detail-icon">' + (ort.icon||'📖') + '</div>';
-  html += '<div><div class="detail-title">' + esc(ort.titel) + '</div>';
+  html += '<div style="flex:1;"><div class="detail-title">' + esc(ort.titel) + '</div>';
   if (ort.autor) html += '<div class="detail-sub">von ' + esc(ort.autor) + '</div>';
-  if (ort.desc) html += '<div style="font-family:var(--body);font-size:15px;color:var(--ink-light);margin-top:4px;">' + esc(ort.desc) + '</div>';
-  if (ort.url) html += '<div style="margin-top:4px;"><a href="' + cleanUrl(ort.url) + '" target="_blank" style="font-family:var(--body);font-size:14px;color:var(--blue);">🔗 Quelle öffnen</a></div>';
-  html += '</div></div>';
+  if (ort.desc) html += '<div style="font-size:15px;color:var(--ink-light);margin-top:4px;">' + esc(ort.desc) + '</div>';
+  if (ort.url) html += '<div style="margin-top:4px;"><a href="' + cleanUrl(ort.url) + '" target="_blank" style="font-size:14px;color:var(--blue);">🔗 Quelle öffnen</a></div>';
+  html += '</div>';
+  html += '<button class="btn btn-sm btn-s" onclick="openOrtModalEdit(\'' + ort.id + '\')">✏️ Ort bearbeiten</button>';
+  html += '</div>';
 
-  if (quests.length) {
+  if (allQuests.length) {
     html += '<div class="prog-wrap" style="margin-bottom:14px;">';
     html += '<div class="prog-track"><div class="prog-fill" style="width:' + pct + '%;"></div></div>';
-    html += '<div class="prog-lbl">' + done + '/' + quests.length + ' Quests abgeschlossen · ' + pct + '%</div>';
+    html += '<div class="prog-lbl">' + done + '/' + allQuests.length + ' Quests · ' + pct + '%</div>';
     html += '</div>';
   }
 
   html += '<div class="btn-row" style="margin-bottom:12px;">';
-  html += '<button class="btn btn-q" onclick="openQuestModalForOrt(\'' + ort.id + '\')">+ Quest hinzufügen</button>';
-  html += '<button class="btn btn-m" onclick="openResModalForOrt(\'' + ort.id + '\')">+ Ressource</button>';
+  html += '<button class="btn btn-q" onclick="openQuestModalForOrt(\'' + ort.id + '\')">+ Quest</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openResModalForOrt(\'' + ort.id + '\')">+ Ressource</button>';
   html += '</div>';
 
-  // Ressourcen des Orts
+  // Ressourcen
   if (ort.ressourcen && ort.ressourcen.length) {
     html += '<div class="qs" style="margin-bottom:12px;">';
     html += '<div class="qh"><span class="qi">🔗</span> Ressourcen</div>';
     html += '<div class="res-list">';
     ort.ressourcen.forEach(function(r, idx) {
-      html += '<div class="res-link">';
-      html += '<a href="' + cleanUrl(r.url) + '" target="_blank">' + esc(r.label||r.url) + '</a>';
-      html += '<button class="res-del-btn" onclick="delOrtRes(\'' + ort.id + '\',' + idx + ')">✕</button>';
-      html += '</div>';
+      html += '<div class="res-link"><a href="' + cleanUrl(r.url) + '" target="_blank">' + esc(r.label||r.url) + '</a>';
+      html += '<button class="res-del-btn" onclick="delOrtRes(\'' + ort.id + '\',' + idx + ')">✕</button></div>';
     });
     html += '</div></div>';
   }
 
-  if (!quests.length) {
+  if (!allQuests.length) {
     html += '<div class="empty-st">Noch keine Quests.<br>Füge die erste hinzu!</div>';
   } else {
     html += '<div class="quest-list">';
-    quests.forEach(function(q) {
-      html += '<div class="quest-item">';
-      html += '<div class="quest-check ' + (q.done?'done':'') + '" onclick="toggleQuest(\'' + q.id + '\')">' + (q.done?'✓':'') + '</div>';
-      html += '<div><div class="quest-name ' + (q.done?'done':'') + '">' + esc(q.name) + '</div>';
-      html += '<div class="quest-meta">' + q.typ;
-      if (q.desc) html += ' · ' + esc(q.desc.slice(0,60));
-      html += '</div>';
-      if (q.links && q.links.length) {
-        html += '<div class="res-list">';
-        q.links.forEach(function(l, li) {
-          html += '<div class="res-link"><a href="' + cleanUrl(l.url) + '" target="_blank">' + esc(l.label||l.url) + '</a>';
-          html += '<button class="res-del-btn" onclick="delQuestLink(\'' + q.id + '\',' + li + ')">✕</button></div>';
-        });
-        html += '</div>';
-      }
-      html += '</div>';
-      html += '<button class="btn btn-sm btn-d" style="margin-left:auto;" onclick="delQuest(\'' + q.id + '\')">✕</button>';
-      html += '</div>';
-    });
+    html += renderQuestTree(ort.id, null, 0);
     html += '</div>';
   }
 
   v.innerHTML = html;
+}
+
+function renderQuestTree(ortId, parentId, depth) {
+  var quests = S.quests.filter(function(q){
+    return q.ortId === ortId && (q.parentId||null) === (parentId||null);
+  });
+  if (!quests.length) return '';
+  var html = '';
+  var indent = depth * 20;
+  var TYP_ICONS = { Abschnitt:'📂', Kapitel:'📖', Unterkapitel:'📄', Aufgabe:'⚔️', Artikel:'📰', Recherche:'🔬', Frei:'✨' };
+  quests.forEach(function(q) {
+    var hasChildren = S.quests.some(function(x){ return x.parentId === q.id; });
+    var typIcon = TYP_ICONS[q.typ] || '📖';
+    html += '<div class="quest-item" style="padding-left:' + (12 + indent) + 'px;border-left:' + (depth>0?'2px solid var(--border)':'none') + ';margin-left:' + (depth>0?'8px':'0') + ';">';
+    html += '<div class="quest-check ' + (q.done?'done':'') + '" onclick="toggleQuest(\'' + q.id + '\')">' + (q.done?'✓':'') + '</div>';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<div class="quest-name ' + (q.done?'done':'') + '">';
+    html += '<span style="font-size:14px;margin-right:4px;opacity:0.7;">' + typIcon + '</span>';
+    html += esc(q.name) + '</div>';
+    html += '<div class="quest-meta">' + (q.typ||'') + (q.desc ? ' · ' + esc(q.desc.slice(0,60)) : '') + '</div>';
+    if (q.links && q.links.length) {
+      html += '<div class="res-list">';
+      q.links.forEach(function(l, li) {
+        html += '<div class="res-link"><a href="' + cleanUrl(l.url) + '" target="_blank">' + esc(l.label||l.url) + '</a>';
+        html += '<button class="res-del-btn" onclick="delQuestLink(\'' + q.id + '\',' + li + ')">✕</button></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    // Actions
+    html += '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center;">';
+    if (hasChildren || q.typ === 'Abschnitt') {
+      html += '<button class="btn btn-sm btn-t" onclick="openQuestModalForOrt(\'' + ortId + '\',\'' + q.id + '\')" title="Unterquest hinzufügen">+</button>';
+    }
+    html += '<button class="btn btn-sm btn-s" onclick="openQuestModal(\'' + q.id + '\')" title="Bearbeiten">✏️</button>';
+    html += '<button class="btn btn-sm btn-d" onclick="delQuest(\'' + q.id + '\')">✕</button>';
+    html += '</div>';
+    html += '</div>';
+    // Children
+    if (hasChildren) {
+      html += renderQuestTree(ortId, q.id, depth + 1);
+    }
+  });
+  return html;
+}
+
+function openOrtModalEdit(id) {
+  editingOrtId = id;
+  var ort = S.orte.find(function(o){ return o.id === id; });
+  if (!ort) return;
+  populateWeltSelect('om-welt', ort.weltId);
+  omUpdateKontinente();
+  omUpdateLaender();
+  document.getElementById('om-titel').value = ort.titel||'';
+  document.getElementById('om-autor').value = ort.autor||'';
+  document.getElementById('om-icon').value = ort.icon||'📖';
+  document.getElementById('om-desc').value = ort.desc||'';
+  document.getElementById('om-url').value = ort.url||'';
+  document.getElementById('om-typ').value = ort.typ||'Stadt';
+  if (ort.kontinentId) document.getElementById('om-kontinent').value = ort.kontinentId;
+  if (ort.landId) document.getElementById('om-land').value = ort.landId;
+  document.getElementById('ort-modal-title').textContent = '✏️ ORT BEARBEITEN';
+  openModal('ort-modal');
 }
 
 function navBack() {
@@ -1874,12 +1930,45 @@ function delOrtRes(ortId, idx) {
 ═══════════════════════════════════════════════════ */
 var editingQuestId = null;
 
-function openQuestModal() {
-  editingQuestId = null;
+function openQuestModal(editId) {
+  editingQuestId = editId || null;
   populateOrtSelect('qm-ort', null);
+  qmUpdateParents();
   document.getElementById('qm-name').value = '';
   document.getElementById('qm-desc').value = '';
   document.getElementById('qm-links').value = '';
+  document.getElementById('qm-typ').value = 'Kapitel';
+  qmAlSelectedIds = [];
+  document.getElementById('qm-al-search').value = '';
+  document.getElementById('qm-al-results').style.display = 'none';
+  renderQmAlSelected();
+  document.getElementById('quest-modal-title').textContent = '⚔️ QUEST HINZUFÜGEN';
+
+  if (editId) {
+    var q = S.quests.find(function(x){ return x.id === editId; });
+    if (q) {
+      document.getElementById('qm-name').value = q.name || '';
+      document.getElementById('qm-desc').value = q.desc || '';
+      document.getElementById('qm-links').value = (q.links||[]).map(function(l){return l.url;}).join(', ');
+      document.getElementById('qm-typ').value = q.typ || 'Kapitel';
+      populateOrtSelect('qm-ort', q.ortId);
+      qmUpdateParents(q.parentId, q.id);
+      qmAlSelectedIds = (q.alIds||[]).slice();
+      renderQmAlSelected();
+      document.getElementById('quest-modal-title').textContent = '✏️ QUEST BEARBEITEN';
+    }
+  }
+  openModal('quest-modal');
+}
+
+function openQuestModalForOrt(ortId, parentId) {
+  editingQuestId = null;
+  populateOrtSelect('qm-ort', ortId);
+  qmUpdateParents(parentId);
+  document.getElementById('qm-name').value = '';
+  document.getElementById('qm-desc').value = '';
+  document.getElementById('qm-links').value = '';
+  document.getElementById('qm-typ').value = 'Kapitel';
   qmAlSelectedIds = [];
   document.getElementById('qm-al-search').value = '';
   document.getElementById('qm-al-results').style.display = 'none';
@@ -1888,22 +1977,35 @@ function openQuestModal() {
   openModal('quest-modal');
 }
 
-function openQuestModalForOrt(ortId) {
-  editingQuestId = null;
-  populateOrtSelect('qm-ort', ortId);
-  document.getElementById('qm-name').value = '';
-  document.getElementById('qm-desc').value = '';
-  document.getElementById('qm-links').value = '';
-  qmAlSelectedIds = [];
-  document.getElementById('qm-al-search').value = '';
-  document.getElementById('qm-al-results').style.display = 'none';
-  renderQmAlSelected();
-  document.getElementById('quest-modal-title').textContent = '⚔️ QUEST HINZUFÜGEN';
-  openModal('quest-modal');
+function qmUpdateParents(selectedParentId, excludeId) {
+  var ortId = document.getElementById('qm-ort') ? document.getElementById('qm-ort').value : '';
+  var sel = document.getElementById('qm-parent');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Keine übergeordnete Quest —</option>';
+  var candidates = S.quests.filter(function(q){
+    if (excludeId && q.id === excludeId) return false;
+    if (ortId && q.ortId !== ortId) return false;
+    return true;
+  });
+  candidates.forEach(function(q) {
+    var opt = document.createElement('option');
+    opt.value = q.id;
+    var depth = qmGetDepth(q.id, 0);
+    opt.textContent = '  '.repeat(depth) + q.name.slice(0,50);
+    if (q.id === selectedParentId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function qmGetDepth(id, depth) {
+  var q = S.quests.find(function(x){ return x.id === id; });
+  if (!q || !q.parentId || depth > 8) return depth;
+  return qmGetDepth(q.parentId, depth + 1);
 }
 
 function populateOrtSelect(selId, selectedId) {
   var sel = document.getElementById(selId);
+  if (!sel) return;
   sel.innerHTML = '<option value="">— Kein Ort —</option>';
   S.orte.forEach(function(o) {
     var opt = document.createElement('option');
@@ -1924,6 +2026,7 @@ function saveQuest() {
     name: name,
     typ: document.getElementById('qm-typ').value,
     ortId: document.getElementById('qm-ort').value || null,
+    parentId: document.getElementById('qm-parent').value || null,
     desc: document.getElementById('qm-desc').value.trim(),
     links: links,
     alIds: alIds,
@@ -5786,6 +5889,75 @@ function closeSidebar() {
 var _origSwitchTab = null;
 function hookSidebarIntoSwitchTab(name) {
   sidebarCurrentTab = name;
+}
+
+
+function renderWeltenTable(v) {
+  var html = '';
+  html += '<div class="btn-row" style="margin-bottom:14px;flex-wrap:wrap;">';
+  html += '<button class="btn btn-q" onclick="openWeltModal()">+ Welt</button>';
+  html += '<button class="btn btn-s btn-sm" onclick="openKontinentModal()">+ Kontinent</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openLandModal()">+ Land</button>';
+  html += '<button class="btn btn-t btn-sm" onclick="openOrtModal()">+ Ort</button>';
+  html += '<button class="btn btn-sm" style="margin-left:auto;background:var(--purple-dark);border:1px solid var(--purple);color:white;" onclick="weltenTableView=false;renderWelten();">🗺️ Karten</button>';
+  html += '</div>';
+
+  if (!S.orte.length) { html += '<div class="empty-st">Keine Orte vorhanden.</div>'; v.innerHTML = html; return; }
+
+  html += '<div style="overflow-x:auto;">';
+  html += '<table class="skill-table"><thead><tr>';
+  html += '<th>Titel</th><th>Typ</th><th>Autor</th><th>Welt</th><th>Kontinent</th><th>Land</th><th>Quests</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  S.orte.forEach(function(ort) {
+    var welt = ort.weltId ? S.welten.find(function(w){return w.id===ort.weltId;}) : null;
+    var kont = ort.kontinentId ? S.kontinente.find(function(k){return k.id===ort.kontinentId;}) : null;
+    var land = ort.landId ? S.laender.find(function(l){return l.id===ort.landId;}) : null;
+    var qCount = S.quests.filter(function(q){return q.ortId===ort.id;}).length;
+    var qDone = S.quests.filter(function(q){return q.ortId===ort.id&&q.done;}).length;
+
+    html += '<tr>';
+    // Editable title
+    html += '<td><input type="text" value="' + esc(ort.titel) + '" onchange="ortInlineEdit(\'' + ort.id + '\',\'titel\',this.value)" style="width:100%;background:transparent;border:none;color:var(--ink);font-family:var(--body);font-size:14px;font-weight:700;padding:2px 4px;" onblur="this.style.background=\'transparent\'" onfocus="this.style.background=\'rgba(0,0,0,0.2)\'"></td>';
+    // Typ select
+    html += '<td><select onchange="ortInlineEdit(\'' + ort.id + '\',\'typ\',this.value)" style="background:transparent;border:none;color:var(--ink);font-size:13px;cursor:pointer;">';
+    ['Stadt','Dorf'].forEach(function(t){ html += '<option' + (ort.typ===t?' selected':'') + '>' + t + '</option>'; });
+    html += '</select></td>';
+    // Editable autor
+    html += '<td><input type="text" value="' + esc(ort.autor||'') + '" onchange="ortInlineEdit(\'' + ort.id + '\',\'autor\',this.value)" placeholder="—" style="width:100%;background:transparent;border:none;color:var(--ink-light);font-family:var(--body);font-size:13px;padding:2px 4px;" onfocus="this.style.background=\'rgba(0,0,0,0.2)\'" onblur="this.style.background=\'transparent\'"></td>';
+    // Welt select
+    html += '<td><select onchange="ortInlineEdit(\'' + ort.id + '\',\'weltId\',this.value)" style="background:transparent;border:none;color:var(--ink-light);font-size:12px;cursor:pointer;">';
+    html += '<option value="">—</option>';
+    S.welten.forEach(function(w){ html += '<option value="' + w.id + '"' + (ort.weltId===w.id?' selected':'') + '>' + esc(w.name) + '</option>'; });
+    html += '</select></td>';
+    // Kontinent select
+    html += '<td><select onchange="ortInlineEdit(\'' + ort.id + '\',\'kontinentId\',this.value)" style="background:transparent;border:none;color:var(--ink-light);font-size:12px;cursor:pointer;">';
+    html += '<option value="">—</option>';
+    S.kontinente.filter(function(k){return !ort.weltId||k.weltId===ort.weltId;}).forEach(function(k){ html += '<option value="' + k.id + '"' + (ort.kontinentId===k.id?' selected':'') + '>' + esc(k.name) + '</option>'; });
+    html += '</select></td>';
+    // Land select
+    html += '<td><select onchange="ortInlineEdit(\'' + ort.id + '\',\'landId\',this.value)" style="background:transparent;border:none;color:var(--ink-light);font-size:12px;cursor:pointer;">';
+    html += '<option value="">—</option>';
+    S.laender.filter(function(l){return !ort.kontinentId||l.kontinentId===ort.kontinentId;}).forEach(function(l){ html += '<option value="' + l.id + '"' + (ort.landId===l.id?' selected':'') + '>' + esc(l.name) + '</option>'; });
+    html += '</select></td>';
+    // Quest count
+    html += '<td style="font-size:13px;color:var(--ink-light);text-align:center;">' + (qCount ? qDone+'/'+qCount : '—') + '</td>';
+    // Actions
+    html += '<td><div style="display:flex;gap:4px;">';
+    html += '<button class="btn btn-sm btn-s" onclick="navOrt(\'' + ort.id + '\')">→</button>';
+    html += '<button class="btn btn-sm btn-d" onclick="delOrt(\'' + ort.id + '\')">✕</button>';
+    html += '</div></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  v.innerHTML = html;
+}
+
+function ortInlineEdit(ortId, field, value) {
+  var ort = S.orte.find(function(o){ return o.id===ortId; });
+  if (!ort) return;
+  ort[field] = value || null;
+  save();
 }
 
 
