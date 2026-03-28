@@ -1000,6 +1000,31 @@ label { font-family:var(--body); font-size:11px; font-weight:700; color:var(--in
   </div>
 </div>
 
+<!-- MODAL: Ort → Quest konvertieren -->
+<div class="modal-bg hidden" id="ort-to-quest-modal">
+  <div class="modal-box">
+    <div class="modal-title">⟳ ORT ALS QUEST KONVERTIEREN</div>
+    <div class="notice">Der Ort wird zu einer <strong>Abschnitt</strong>-Quest. Alle seine Quests werden zu Unterquests. Der Ort selbst wird danach gelöscht.</div>
+    <div id="o2q-ort-info" style="font-weight:700;font-size:16px;color:var(--gold);margin-bottom:12px;"></div>
+    <label>ZIEL-ORT (wohin soll die neue Quest gehören?)</label>
+    <select id="o2q-zielort" style="width:100%;"></select>
+    <label>ÜBERGEORDNETE QUEST (optional)</label>
+    <select id="o2q-parent" style="width:100%;"></select>
+    <label>NAME DER NEUEN QUEST</label>
+    <input type="text" id="o2q-name" placeholder="Name des Abschnitts">
+    <label>TYP</label>
+    <select id="o2q-typ" style="width:100%;">
+      <option value="Abschnitt">📂 Abschnitt</option>
+      <option value="Kapitel">📖 Kapitel</option>
+      <option value="Unterkapitel">📄 Unterkapitel</option>
+    </select>
+    <div class="btn-row">
+      <button class="btn btn-v" onclick="doOrtToQuest()">⟳ Konvertieren</button>
+      <button class="btn btn-d" onclick="closeModal('ort-to-quest-modal')">✕ Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Welt -->
 <div class="modal-bg hidden" id="welt-modal">
   <div class="modal-box">
@@ -1552,6 +1577,7 @@ function renderOrtDetail(v) {
   if (ort.desc) html += '<div style="font-size:15px;color:var(--ink-light);margin-top:4px;">' + esc(ort.desc) + '</div>';
   if (ort.url) html += '<div style="margin-top:4px;"><a href="' + cleanUrl(ort.url) + '" target="_blank" style="font-size:14px;color:var(--blue);">🔗 Quelle öffnen</a></div>';
   html += '</div>';
+  html += '<button class="btn btn-sm btn-s" onclick="openOrtToQuestModal(\'' + ort.id + '\')" title="Diesen Ort in eine Quest konvertieren">⟳ Als Quest</button>';
   html += '<button class="btn btn-sm btn-s" onclick="openOrtModalEdit(\'' + ort.id + '\')">✏️ Ort bearbeiten</button>';
   html += '</div>';
 
@@ -5945,6 +5971,7 @@ function renderWeltenTable(v) {
     // Actions
     html += '<td><div style="display:flex;gap:4px;">';
     html += '<button class="btn btn-sm btn-s" onclick="navOrt(\'' + ort.id + '\')">→</button>';
+    html += '<button class="btn btn-sm btn-m" onclick="openOrtToQuestModal(\'' + ort.id + '\')" title="Als Quest konvertieren">⟳</button>';
     html += '<button class="btn btn-sm btn-d" onclick="delOrt(\'' + ort.id + '\')">✕</button>';
     html += '</div></td>';
     html += '</tr>';
@@ -5958,6 +5985,106 @@ function ortInlineEdit(ortId, field, value) {
   if (!ort) return;
   ort[field] = value || null;
   save();
+}
+
+
+/* ═══════════════════════════════════════════════════
+   ORT → QUEST KONVERTIERUNG
+═══════════════════════════════════════════════════ */
+var o2qOrtId = null;
+
+function openOrtToQuestModal(ortId) {
+  o2qOrtId = ortId;
+  var ort = S.orte.find(function(o){ return o.id === ortId; });
+  if (!ort) return;
+
+  document.getElementById('o2q-ort-info').textContent = (ort.icon||'📖') + ' ' + ort.titel;
+  document.getElementById('o2q-name').value = ort.titel;
+
+  // Populate Ziel-Ort (alle Orte außer dem zu konvertierenden)
+  var zielSel = document.getElementById('o2q-zielort');
+  zielSel.innerHTML = '<option value="">— Kein Ziel-Ort (freie Quest) —</option>';
+  S.orte.filter(function(o){ return o.id !== ortId; }).forEach(function(o) {
+    var opt = document.createElement('option');
+    opt.value = o.id;
+    opt.textContent = (o.icon||'📖') + ' ' + o.titel;
+    // Pre-select parent if ort has a weltId in common
+    if (o.weltId === ort.weltId) opt.selected = true;
+    zielSel.appendChild(opt);
+  });
+
+  // Populate übergeordnete Quest
+  o2qUpdateParents();
+  zielSel.onchange = o2qUpdateParents;
+
+  openModal('ort-to-quest-modal');
+}
+
+function o2qUpdateParents() {
+  var zielOrtId = document.getElementById('o2q-zielort').value;
+  var sel = document.getElementById('o2q-parent');
+  sel.innerHTML = '<option value="">— Keine übergeordnete Quest —</option>';
+  if (!zielOrtId) return;
+  S.quests.filter(function(q){ return q.ortId === zielOrtId; }).forEach(function(q) {
+    var opt = document.createElement('option');
+    opt.value = q.id;
+    var depth = qmGetDepth(q.id, 0);
+    opt.textContent = '  '.repeat(depth) + q.name.slice(0,50);
+    sel.appendChild(opt);
+  });
+}
+
+function doOrtToQuest() {
+  var ort = S.orte.find(function(o){ return o.id === o2qOrtId; });
+  if (!ort) { toast('Ort nicht gefunden.'); return; }
+
+  var name = document.getElementById('o2q-name').value.trim() || ort.titel;
+  var zielOrtId = document.getElementById('o2q-zielort').value || null;
+  var parentId = document.getElementById('o2q-parent').value || null;
+  var typ = document.getElementById('o2q-typ').value || 'Abschnitt';
+
+  // Create the new parent Quest from this Ort
+  var newQuestId = uid();
+  var newQuest = {
+    id: newQuestId,
+    name: name,
+    typ: typ,
+    ortId: zielOrtId,
+    parentId: parentId,
+    desc: ort.desc || '',
+    links: ort.url ? [{url: cleanUrl(ort.url), label: ort.titel}] : [],
+    alIds: [],
+    done: false,
+    datum: todayDE()
+  };
+  S.quests.push(newQuest);
+
+  // Re-parent all existing quests of this ort to the new quest
+  var childQuests = S.quests.filter(function(q){ return q.ortId === o2qOrtId; });
+  childQuests.forEach(function(q) {
+    if (!q.parentId) {
+      // Top-level quests of old ort become children of new quest
+      q.parentId = newQuestId;
+    }
+    // Move to target ort
+    q.ortId = zielOrtId;
+  });
+
+  // Delete the old ort
+  S.orte = S.orte.filter(function(o){ return o.id !== o2qOrtId; });
+
+  save();
+  closeModal('ort-to-quest-modal');
+
+  // Navigate to target ort if set
+  if (zielOrtId) {
+    currentOrtId = zielOrtId;
+    weltenView = 'ort';
+  } else {
+    weltenView = 'list';
+  }
+  renderWelten();
+  toast('✓ ' + esc(name) + ' als Quest konvertiert — ' + childQuests.length + ' Unterquests verschoben.');
 }
 
 
