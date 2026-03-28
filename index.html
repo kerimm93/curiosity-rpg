@@ -5397,31 +5397,34 @@ function gistFetch(token, id, cb) {
 
 function gistApplyData(data, merge) {
   if (merge) {
-    // Reuse mergeJSON logic inline
     function mergeArr(local, incoming) {
       var ids = {}; local.forEach(function(x){ ids[x.id]=1; });
       (incoming||[]).forEach(function(x){ if(!ids[x.id]) local.push(x); });
     }
-    mergeArr(S.welten,   data.welten);
-    mergeArr(S.orte,     data.orte);
-    mergeArr(S.quests,   data.quests);
-    mergeArr(S.konzepte, data.konzepte);
-    mergeArr(S.antilib,  data.antilib);
-    mergeArr(S.sprints,  data.sprints);
-    mergeArr(S.log,      data.log);
+    mergeArr(S.welten,      data.welten);
+    mergeArr(S.kontinente,  data.kontinente);
+    mergeArr(S.laender,     data.laender);
+    mergeArr(S.orte,        data.orte);
+    mergeArr(S.quests,      data.quests);
+    mergeArr(S.konzepte,    data.konzepte);
+    mergeArr(S.antilib,     data.antilib);
+    mergeArr(S.sprints,     data.sprints);
+    mergeArr(S.log,         data.log);
   } else {
-    S.welten   = data.welten   || [];
-    S.orte     = data.orte     || [];
-    S.quests   = data.quests   || [];
-    S.konzepte = data.konzepte || [];
+    S.welten      = data.welten      || [];
+    S.kontinente  = data.kontinente  || [];
+    S.laender     = data.laender     || [];
+    S.orte        = data.orte        || [];
+    S.quests      = data.quests      || [];
+    S.konzepte    = data.konzepte    || [];
     S.wissenTypen = data.wissenTypen || [];
-    S.antilib  = data.antilib  || [];
-    S.sprints  = data.sprints  || [];
-    S.sprintTags = data.sprintTags || { aktionen:[], hilfsmittel:[] };
+    S.antilib     = data.antilib     || [];
+    S.sprints     = data.sprints     || [];
+    S.sprintTags  = data.sprintTags  || { aktionen:[], hilfsmittel:[] };
     if (data.integrations) S.integrations = data.integrations;
-    S.log      = data.log      || [];
+    S.log         = data.log         || [];
+    S.probleme    = data.probleme    || [];
   }
-  // Save locally (without triggering another auto-push)
   try { localStorage.setItem(LKEY, JSON.stringify(S)); } catch(e) {}
   updateStats(); renderWelten(); renderQuests(); renderKonzepte(); renderAntiLib(); renderLog();
 }
