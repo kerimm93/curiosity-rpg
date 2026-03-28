@@ -1334,7 +1334,7 @@ function load() {
   if (!S.sprintTags) S.sprintTags = { aktionen:[], hilfsmittel:[] };
   if (!S.integrations) S.integrations = {
     readwise: { tags: ['Antilibrary'], locations: ['new','later'], lastSync: null },
-    raindrop: { collectionIds: ['46206084','63114547'], snipdOnly: true, lastSync: null },
+    raindrop: { collectionIds: ['46206084','63114547'], snipdOnly: true, lastSync: null, urlRules: [], skipNoRuleMatch: false },
     zotero:   { userId: '', collectionKey: '', lastSync: null }
   };
 }
@@ -4390,7 +4390,7 @@ function renderIntegrationen() {
   html += '<div class="qh"><span class="qi">🌧️</span> Raindrop.io';
   if (cfg.raindrop.lastSync) html += '<span class="int-status int-ok">Zuletzt: ' + cfg.raindrop.lastSync + '</span>';
   html += '</div>';
-  html += '<div class="notice">Importiert Bookmarks aus bestimmten Sammlungen → Anti-Library. Optionaler Filter auf Snipd-Podcast-Links.</div>';
+  html += '<div class="notice">Importiert Bookmarks aus bestimmten Sammlungen. URL-Regeln bestimmen was importiert wird und wie.</div>';
   html += '<div class="field-row">';
   html += '<div class="field-group grow"><label>API-KEY (nur lokal gespeichert)</label>';
   html += '<input type="password" id="int-rd-key" value="' + esc(rdKey) + '" placeholder="Raindrop Bearer Token..." style="width:100%;font-family:var(--body);font-size:15px;background:var(--surface);border:1px solid var(--border);color:var(--ink);padding:6px 10px;" onchange="intSetKey(\'raindrop\',this.value)"></div>';
@@ -4398,11 +4398,34 @@ function renderIntegrationen() {
   html += '<div class="field-row">';
   html += '<div class="field-group grow"><label>COLLECTION-IDs (kommagetrennt)</label>';
   html += '<input type="text" id="int-rd-cols" value="' + esc((cfg.raindrop.collectionIds||[]).join(', ')) + '" placeholder="46206084, 63114547" style="width:100%;font-family:var(--body);font-size:15px;background:var(--surface);border:1px solid var(--border);color:var(--ink);padding:6px 10px;"></div>';
-  html += '<div class="field-group" style="align-self:flex-end;padding-bottom:3px;">';
-  html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-weight:700;font-size:11px;color:var(--ink-light);">';
-  html += '<input type="checkbox" id="int-rd-snipd" ' + (cfg.raindrop.snipdOnly?'checked':'') + ' style="width:14px;height:14px;"> Nur Snipd-Links</label>';
   html += '</div>';
+  html += '<div class="field-row" style="align-items:center;">';
+  html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-weight:700;font-size:11px;color:var(--ink-light);margin-top:0;">';
+  html += '<input type="checkbox" id="int-rd-snipd" ' + (cfg.raindrop.snipdOnly?'checked':'') + ' style="width:14px;height:14px;"> Nur Snipd-Links (Legacy-Filter)</label>';
+  html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--body);font-weight:700;font-size:11px;color:var(--ink-light);margin-top:0;margin-left:16px;">';
+  html += '<input type="checkbox" id="int-rd-norulematch" ' + (cfg.raindrop.skipNoRuleMatch?'checked':'') + ' style="width:14px;height:14px;"> URLs ohne Regel überspringen</label>';
   html += '</div>';
+
+  // URL Rules
+  html += '<div style="margin-top:14px;">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+  html += '<label style="margin:0;font-family:var(--body);font-weight:700;font-size:11px;color:var(--ink-light);">URL-REGELN</label>';
+  html += '<button class="btn btn-q btn-sm" onclick="rdAddRule()">+ Regel</button>';
+  html += '</div>';
+  html += '<div class="notice info" style="margin-bottom:8px;">Eine Regel pro Domain. Reihenfolge: erste passende Regel gewinnt. <strong>Überspringen</strong> = nicht importieren.</div>';
+
+  var rules = cfg.raindrop.urlRules || [];
+  if (!rules.length) {
+    html += '<div style="font-family:var(--body);font-size:13px;color:var(--ink-dim);padding:8px 0;">Noch keine Regeln. Alle URLs werden mit Standard-Typ importiert.</div>';
+  } else {
+    html += '<div id="int-rd-rules-list">';
+    rules.forEach(function(rule, i) {
+      html += rdRuleHtml(rule, i);
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
   html += '<div class="btn-row">';
   html += '<button class="btn btn-q" onclick="intSyncRaindrop()">🔄 Sync starten</button>';
   html += '<button class="btn btn-s btn-sm" onclick="intSaveRDConfig()">✓ Konfiguration speichern</button>';
@@ -4481,8 +4504,11 @@ function intSaveRWConfig() {
 function intSaveRDConfig() {
   var cols = document.getElementById('int-rd-cols').value.split(',').map(function(c){ return c.trim(); }).filter(Boolean);
   var snipd = document.getElementById('int-rd-snipd').checked;
+  var skipNoMatch = document.getElementById('int-rd-norulematch') ? document.getElementById('int-rd-norulematch').checked : false;
   S.integrations.raindrop.collectionIds = cols;
   S.integrations.raindrop.snipdOnly = snipd;
+  S.integrations.raindrop.skipNoRuleMatch = skipNoMatch;
+  // Rules are saved inline via rdSaveRules()
   save(); toast('✓ Raindrop-Konfiguration gespeichert');
 }
 
@@ -4610,12 +4636,83 @@ function rwCategoryToTyp(cat) {
   return m[(cat||'').toLowerCase()] || '📦 Sonstiges';
 }
 
-// ── RAINDROP SYNC ──
+// ── RAINDROP URL RULES ──
+var RD_TYPEN = ['📼 Film','🎙️ Podcast','📖 Buch','📰 Artikel','🎵 Musik','🎧 Hörbuch','💻 Kurs','📧 Newsletter','🎮 Spiel','📦 Sonstiges'];
+var RD_PRESETS = [
+  { pattern:'letterboxd.com', typ:'📼 Film', prio:'mittel', label:'Letterboxd' },
+  { pattern:'open.spotify.com', typ:'🎙️ Podcast', prio:'mittel', label:'Spotify' },
+  { pattern:'music.apple.com', typ:'🎵 Musik', prio:'niedrig', label:'Apple Music' },
+  { pattern:'audible.com', typ:'🎧 Hörbuch', prio:'hoch', label:'Audible' },
+  { pattern:'youtube.com', typ:'📼 Film', prio:'niedrig', label:'YouTube' },
+  { pattern:'share.snipd.com', typ:'🎙️ Podcast', prio:'mittel', label:'Snipd' },
+];
+
+function rdRuleHtml(rule, idx) {
+  var isSkip = rule.action === 'skip';
+  var h = '<div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:6px;align-items:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;" id="rdrule-' + idx + '">';
+  h += '<input type="text" value="' + esc(rule.pattern||'') + '" placeholder="z.B. letterboxd.com" onchange="rdUpdateRule(' + idx + ',\'pattern\',this.value)" style="font-family:var(--body);font-size:14px;background:rgba(0,0,0,0.2);border:1px solid var(--border);color:var(--ink);padding:6px 10px;border-radius:4px;">';
+  h += '<select onchange="rdUpdateRule(' + idx + ',\'action\',this.value)" style="font-family:var(--body);font-size:13px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--ink);padding:6px 8px;border-radius:4px;">';
+  h += '<option value="import"' + (!isSkip?' selected':'') + '>✓ Importieren</option>';
+  h += '<option value="skip"' + (isSkip?' selected':'') + '>✗ Überspringen</option>';
+  h += '</select>';
+  h += '<select onchange="rdUpdateRule(' + idx + ',\'typ\',this.value)" style="font-family:var(--body);font-size:13px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--ink);padding:6px 8px;border-radius:4px;"' + (isSkip?' disabled':'') + '>';
+  RD_TYPEN.forEach(function(t){ h += '<option' + (rule.typ===t?' selected':'') + '>' + t + '</option>'; });
+  h += '</select>';
+  h += '<select onchange="rdUpdateRule(' + idx + ',\'prio\',this.value)" style="font-family:var(--body);font-size:13px;background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--ink);padding:6px 8px;border-radius:4px;"' + (isSkip?' disabled':'') + '>';
+  ['hoch','mittel','niedrig'].forEach(function(p){ h += '<option' + (rule.prio===p?' selected':'') + '>' + p + '</option>'; });
+  h += '</select>';
+  h += '<button onclick="rdDeleteRule(' + idx + ')" style="background:var(--red);color:white;border:none;border-radius:4px;padding:6px 10px;cursor:pointer;font-size:13px;">✕</button>';
+  h += '</div>';
+  return h;
+}
+
+function rdAddRule() {
+  if (!S.integrations.raindrop.urlRules) S.integrations.raindrop.urlRules = [];
+  S.integrations.raindrop.urlRules.push({ pattern:'', action:'import', typ:'📦 Sonstiges', prio:'mittel' });
+  save(); renderIntegrationen();
+}
+
+function rdUpdateRule(idx, field, value) {
+  var rules = S.integrations.raindrop.urlRules || [];
+  if (!rules[idx]) return;
+  rules[idx][field] = value;
+  save();
+}
+
+function rdDeleteRule(idx) {
+  var rules = S.integrations.raindrop.urlRules || [];
+  rules.splice(idx, 1);
+  S.integrations.raindrop.urlRules = rules;
+  save(); renderIntegrationen();
+}
+
+function rdMatchRule(url) {
+  var rules = (S.integrations.raindrop.urlRules || []).filter(function(r){ return r.pattern && r.pattern.trim(); });
+  for (var i = 0; i < rules.length; i++) {
+    var r = rules[i];
+    if ((url||'').toLowerCase().includes(r.pattern.toLowerCase().trim())) {
+      return r; // { action, typ, prio, pattern }
+    }
+  }
+  return null; // no match
+}
+
+function rdApplyRule(item, rule) {
+  if (rule) {
+    item.typ = rule.typ || item.typ;
+    item.prio = rule.prio || item.prio;
+  }
+  return item;
+}
+
+
 function intSyncRaindrop() {
   var key = intGetKey('raindrop');
   if (!key) { toast('⚠️ Kein Raindrop API-Key gesetzt!'); return; }
   var cols = S.integrations.raindrop.collectionIds;
   var snipdOnly = S.integrations.raindrop.snipdOnly;
+  var skipNoMatch = S.integrations.raindrop.skipNoRuleMatch;
+  var hasRules = (S.integrations.raindrop.urlRules||[]).filter(function(r){return r.pattern&&r.pattern.trim();}).length > 0;
   if (!cols.length) { toast('⚠️ Mindestens eine Collection-ID angeben!'); return; }
 
   var statusEl = document.getElementById('int-rd-status');
@@ -4624,27 +4721,46 @@ function intSyncRaindrop() {
 
   intFetchRDCols(key, cols, 0, [], snipdOnly, function(items, err) {
     if (err) { statusEl.innerHTML = '<span class="int-status int-err">API-Fehler: ' + esc(err) + '</span>'; return; }
-    // Deduplicate by externalId AND url
     var existingExtIds = {};
     var existingUrls = {};
     S.antilib.forEach(function(a){
       if (a.externalId) existingExtIds[a.externalId] = 1;
       if (a.url) existingUrls[a.url] = 1;
     });
-    var fresh = items.filter(function(d){
-      var extId = String(d._id || d.id || '');
-      return !existingExtIds['rd:' + extId] && !existingUrls[d.link];
+
+    var skipped = 0;
+    var fresh = [];
+    items.forEach(function(d) {
+      var extId = 'rd:' + String(d._id||d.id||'');
+      if (existingExtIds[extId] || existingUrls[d.link]) return; // already imported
+
+      var url = d.link || '';
+      var rule = rdMatchRule(url);
+
+      // Apply rule filtering
+      if (rule && rule.action === 'skip') { skipped++; return; }
+      if (!rule && hasRules && skipNoMatch) { skipped++; return; }
+
+      // Determine typ — from rule or fallback
+      var typ = (rule && rule.typ) ? rule.typ : '📦 Sonstiges';
+      var prio = (rule && rule.prio) ? rule.prio : 'mittel';
+
+      fresh.push({
+        externalId: extId,
+        titel: d.title||'(Ohne Titel)',
+        url: url,
+        typ: typ,
+        prio: prio,
+        herkunft: 'Raindrop.io',
+        warum: d.excerpt||d.note||'',
+        _raw: d
+      });
     });
-    intPreviewData.items = fresh.map(function(d){
-      return {
-        externalId: 'rd:' + String(d._id||d.id||''),
-        titel: d.title||'(Ohne Titel)', url: d.link||'',
-        typ: '🎙️ Podcast', herkunft: 'Raindrop.io',
-        warum: d.excerpt||d.note||'', _raw: d
-      };
-    });
-    intShowPreview('raindrop', fresh.length, items.length - fresh.length);
-    statusEl.innerHTML = '<span class="int-status int-ok">✓ ' + items.length + ' gefunden · ' + fresh.length + ' neu</span>';
+
+    intPreviewData.items = fresh;
+    var skippedMsg = skipped ? ' · ' + skipped + ' übersprungen' : '';
+    intShowPreview('raindrop', fresh.length, items.length - fresh.length - skipped);
+    statusEl.innerHTML = '<span class="int-status int-ok">✓ ' + items.length + ' abgerufen · ' + fresh.length + ' neu' + skippedMsg + '</span>';
     S.integrations.raindrop.lastSync = todayDE();
     save();
   });
