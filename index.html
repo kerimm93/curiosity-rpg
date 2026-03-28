@@ -1416,7 +1416,28 @@ function switchTab(name, btn) {
 /* ═══════════════════════════════════════════════════
    ① WELTEN
 ═══════════════════════════════════════════════════ */
-var weltenView = 'list'; // 'list' | 'ort' | 'welten-detail'
+var weltenCollapsed = {}; // { 'welt:id': true, 'kont:id': true, 'land:id': true }
+
+function toggleCollapse(key) {
+  weltenCollapsed[key] = !weltenCollapsed[key];
+  try { localStorage.setItem('curiosity_collapsed', JSON.stringify(weltenCollapsed)); } catch(e) {}
+  renderWelten();
+}
+
+function loadCollapsed() {
+  try { var d = localStorage.getItem('curiosity_collapsed'); if (d) weltenCollapsed = JSON.parse(d); } catch(e) {}
+}
+
+function collapseBtn(key, label, icon, count) {
+  var collapsed = weltenCollapsed[key];
+  return '<span onclick="toggleCollapse(\'' + key + '\')" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;">'
+    + '<span style="font-size:12px;color:var(--ink-dim);transition:transform .15s;display:inline-block;transform:rotate(' + (collapsed?'-90':'0') + 'deg);">▼</span>'
+    + icon + ' ' + label
+    + (count !== undefined ? ' <span style="font-size:11px;color:var(--ink-dim);font-weight:normal;">(' + count + ')</span>' : '')
+    + '</span>';
+}
+
+var weltenView = 'list';
 var weltenTableView = false;
 var currentWeltId = null;
 var currentOrtId = null;
@@ -1468,22 +1489,34 @@ function renderWeltenList(v) {
   }
 
   S.welten.forEach(function(welt) {
+    var weltKey = 'welt:' + welt.id;
+    var weltCollapsed = weltenCollapsed[weltKey];
+    var weltOrtCount = S.orte.filter(function(o){ return o.weltId===welt.id; }).length;
+    var weltKontCount = S.kontinente.filter(function(k){ return k.weltId===welt.id; }).length;
+
     // Welt header
-    html += '<div class="phase-header">' + (welt.icon||'🌍') + ' ' + esc(welt.name);
-    if (welt.desc) html += ' <span style="font-size:13px;color:var(--ink-light);font-weight:normal;">' + esc(welt.desc) + '</span>';
+    html += '<div class="phase-header">';
+    html += collapseBtn(weltKey, esc(welt.name), (welt.icon||'🌍'), weltOrtCount + (weltKontCount ? ' · ' + weltKontCount + ' Kontinente' : ''));
+    if (welt.desc) html += ' <span style="font-size:13px;color:var(--ink-light);font-weight:normal;margin-left:4px;">' + esc(welt.desc) + '</span>';
     html += '<div style="margin-left:auto;display:flex;gap:4px;flex-shrink:0;">';
     html += '<button onclick="event.stopPropagation();openKontinentModal()" title="Kontinent hinzufügen" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">+🗺️</button>';
     html += '<button onclick="event.stopPropagation();openWeltModal(\'' + welt.id + '\')" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
     html += '<button onclick="event.stopPropagation();delWelt(\'' + welt.id + '\')" style="font-size:13px;padding:4px 8px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
     html += '</div></div>';
 
+    if (weltCollapsed) { html += '<div style="margin-bottom:8px;"></div>'; return; }
+
     // Kontinente dieser Welt
     var weltsKontinente = S.kontinente.filter(function(k){ return k.weltId === welt.id; });
 
     weltsKontinente.forEach(function(kont) {
+      var kontKey = 'kont:' + kont.id;
+      var kontCollapsed = weltenCollapsed[kontKey];
+      var kontOrtCount = S.orte.filter(function(o){ return o.kontinentId===kont.id; }).length;
+      var kontLandCount = S.laender.filter(function(l){ return l.kontinentId===kont.id; }).length;
+
       html += '<div style="margin:8px 0 4px 16px;padding:8px 12px;background:var(--surface);border-left:3px solid var(--purple);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
-      html += '<span style="font-size:16px;">' + (kont.icon||'🗺️') + '</span>';
-      html += '<span style="font-family:var(--body);font-weight:700;font-size:14px;color:var(--purple-light);">' + esc(kont.name) + '</span>';
+      html += collapseBtn(kontKey, esc(kont.name), (kont.icon||'🗺️'), kontOrtCount + (kontLandCount ? ' · ' + kontLandCount + ' Länder' : ''));
       if (kont.desc) html += '<span style="font-size:12px;color:var(--ink-dim);">' + esc(kont.desc) + '</span>';
       html += '<div style="margin-left:auto;display:flex;gap:4px;">';
       html += '<button onclick="openLandModal()" title="Land hinzufügen" style="font-size:12px;padding:3px 7px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">+🏛️</button>';
@@ -1491,43 +1524,70 @@ function renderWeltenList(v) {
       html += '<button onclick="delKontinent(\'' + kont.id + '\')" style="font-size:12px;padding:3px 7px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
       html += '</div></div>';
 
+      if (kontCollapsed) return;
+
       // Länder dieses Kontinents
       var kontLaender = S.laender.filter(function(l){ return l.kontinentId === kont.id; });
       kontLaender.forEach(function(land) {
+        var landKey = 'land:' + land.id;
+        var landCollapsed = weltenCollapsed[landKey];
+        var landOrtCount = S.orte.filter(function(o){ return o.landId===land.id; }).length;
+
         html += '<div style="margin:4px 0 4px 32px;padding:6px 12px;background:var(--surface-2);border-left:3px solid var(--teal);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
-        html += '<span style="font-size:14px;">' + (land.icon||'🏛️') + '</span>';
-        html += '<span style="font-family:var(--body);font-weight:700;font-size:13px;color:var(--teal);">' + esc(land.name) + '</span>';
+        html += collapseBtn(landKey, esc(land.name), (land.icon||'🏛️'), landOrtCount);
         html += '<div style="margin-left:auto;display:flex;gap:4px;">';
         html += '<button onclick="openLandModal(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
         html += '<button onclick="delLand(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
         html += '</div></div>';
-        // Orte dieses Landes
-        var landOrte = S.orte.filter(function(o){ return o.landId === land.id; });
-        if (landOrte.length) html += '<div style="margin-left:48px;">' + renderOrteCards(landOrte) + '</div>';
+        if (!landCollapsed) {
+          var landOrte = S.orte.filter(function(o){ return o.landId === land.id; });
+          if (landOrte.length) html += '<div style="margin-left:48px;">' + renderOrteCards(landOrte) + '</div>';
+        }
       });
 
-      // Orte direkt im Kontinent (kein Land)
-      var kontOrteOhneLand = S.orte.filter(function(o){ return o.kontinentId === kont.id && !o.landId; });
-      if (kontOrteOhneLand.length) html += '<div style="margin-left:32px;">' + renderOrteCards(kontOrteOhneLand) + '</div>';
+      if (!kontCollapsed) {
+        // Orte direkt im Kontinent (kein Land)
+        var kontOrteOhneLand = S.orte.filter(function(o){ return o.kontinentId === kont.id && !o.landId; });
+        if (kontOrteOhneLand.length) html += '<div style="margin-left:32px;">' + renderOrteCards(kontOrteOhneLand) + '</div>';
+      }
     });
 
     // Länder ohne Kontinent in dieser Welt
     var weltLaenderOhneKont = S.laender.filter(function(l){ return l.weltId===welt.id && !l.kontinentId; });
     weltLaenderOhneKont.forEach(function(land) {
+      var landKey = 'land:' + land.id;
+      var landCollapsed = weltenCollapsed[landKey];
+      var landOrtCount = S.orte.filter(function(o){ return o.landId===land.id; }).length;
+
       html += '<div style="margin:4px 0 4px 16px;padding:6px 12px;background:var(--surface-2);border-left:3px solid var(--teal);border-radius:0 6px 6px 0;display:flex;align-items:center;gap:8px;">';
-      html += '<span style="font-size:14px;">' + (land.icon||'🏛️') + '</span>';
-      html += '<span style="font-family:var(--body);font-weight:700;font-size:13px;color:var(--teal);">' + esc(land.name) + '</span>';
+      html += collapseBtn(landKey, esc(land.name), (land.icon||'🏛️'), landOrtCount);
       html += '<div style="margin-left:auto;display:flex;gap:4px;">';
       html += '<button onclick="openLandModal(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--ink-light);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✏️</button>';
       html += '<button onclick="delLand(\'' + land.id + '\')" style="font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.2);color:var(--red);border:1px solid var(--border);cursor:pointer;border-radius:4px;">✕</button>';
       html += '</div></div>';
-      var landOrte = S.orte.filter(function(o){ return o.landId===land.id; });
-      if (landOrte.length) html += '<div style="margin-left:32px;">' + renderOrteCards(landOrte) + '</div>';
+      if (!landCollapsed) {
+        var landOrte = S.orte.filter(function(o){ return o.landId===land.id; });
+        if (landOrte.length) html += '<div style="margin-left:32px;">' + renderOrteCards(landOrte) + '</div>';
+      }
     });
 
     // Orte direkt in Welt (kein Kontinent, kein Land)
-    var weltOrteOhneKont = S.orte.filter(function(o){ return o.weltId===welt.id && !o.kontinentId && !o.landId; });
+    var weltOrteOhneKont = S.orte.filter(function(o){
+      return o.weltId===welt.id && !o.kontinentId && !o.landId;
+    });
     if (weltOrteOhneKont.length) html += '<div style="margin-left:16px;">' + renderOrteCards(weltOrteOhneKont) + '</div>';
+
+    // FALLBACK: Orte deren Kontinent/Land nicht (mehr) existiert
+    var weltOrteVerwaist = S.orte.filter(function(o) {
+      if (o.weltId !== welt.id) return false;
+      if (o.landId && !S.laender.find(function(l){ return l.id===o.landId; })) return true;
+      if (o.kontinentId && !o.landId && !S.kontinente.find(function(k){ return k.id===o.kontinentId; })) return true;
+      return false;
+    });
+    if (weltOrteVerwaist.length) {
+      html += '<div style="margin:4px 0 4px 16px;font-family:var(--body);font-size:11px;color:var(--ink-dim);padding:4px 8px;">⚠️ Zuordnung fehlt — bitte in Tabellenansicht korrigieren</div>';
+      html += '<div style="margin-left:16px;">' + renderOrteCards(weltOrteVerwaist) + '</div>';
+    }
 
     html += '<div style="margin-bottom:20px;"></div>';
   });
@@ -6213,6 +6273,7 @@ function esc(s) {
    INIT
 ═══════════════════════════════════════════════════ */
 load();
+loadCollapsed();
 document.getElementById('log-datum').value = today();
 renderDashboard();
 renderWelten();
