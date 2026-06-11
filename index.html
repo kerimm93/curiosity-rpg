@@ -208,6 +208,7 @@ label { font-family:var(--body); font-size:11px; font-weight:600; color:var(--in
 
 /* EMPTY */
 .empty-st { text-align:center; padding:40px 20px; font-family:var(--display); font-style:italic; font-size:18px; color:var(--ink-faint); line-height:1.8; }
+.empty-st-action { margin-top:14px; font-style:normal; }
 
 /* TOAST */
 #toast { position:fixed; bottom:20px; right:20px; background:var(--paper); border:1px solid var(--rule); border-left:3px solid var(--seal); box-shadow:var(--lift); padding:12px 20px; font-family:var(--body); font-size:13px; font-weight:500; color:var(--ink); transform:translateY(80px); opacity:0; transition:all .2s; z-index:999; max-width:320px; line-height:1.5; border-radius:var(--r-md); }
@@ -2686,7 +2687,23 @@ function renderQuests() {
   if (questViewFilter === 'offen') qs = qs.filter(function(q){ return !q.done; });
   if (questViewFilter === 'erledigt') qs = qs.filter(function(q){ return q.done; });
 
-  if (!qs.length) { html += '<div class="empty-st">Keine Quests gefunden.</div>'; v.innerHTML = html; return; }
+  if (totalQuests === 0) {
+    html += '<div class="empty-st">Noch keine Expeditionen. Lege deinen ersten Weg ins Unbekannte an.';
+    html += '<div class="empty-st-action"><button type="button" class="btn btn-q" onclick="openQuestModal()">Erste Expedition anlegen</button></div>';
+    html += '</div>';
+    v.innerHTML = html;
+    return;
+  }
+
+  if (!qs.length) {
+    var filterLabels = { offen: 'Offen', erledigt: 'Erledigt' };
+    var activeFilterLabel = filterLabels[questViewFilter] || 'Alle';
+    html += '<div class="empty-st">Im Filter „' + esc(activeFilterLabel) + '“ gibt es keine Expeditionen.';
+    html += '<div class="empty-st-action"><button type="button" class="btn btn-s" onclick="setQuestFilter(\'alle\')">Alle Expeditionen anzeigen</button></div>';
+    html += '</div>';
+    v.innerHTML = html;
+    return;
+  }
 
   html += '<div class="quest-list">';
   html += renderQuestHierarchy(qs, quests);
