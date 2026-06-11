@@ -79,4 +79,36 @@ function renderedQuest(html, id) {
   assert((html.match(/>cycle-b<\/div>/g) || []).length === 1, 'Second cyclic quest rendered more than once');
 })();
 
+(function rendersQuestCardContentAndActionsFromQuestData() {
+  global.esc = function(value) {
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  global.cleanUrl = function(value) { return 'clean:' + value; };
+
+  const openQuest = quest('quest-open');
+  openQuest.status = 'Erledigt';
+  openQuest.desc = '<Notiz & Plan>';
+  openQuest.links = [{ url: 'https://example.com/?a=1', label: '<Quelle>' }];
+  const openHtml = renderQuestEntry(openQuest, 0, '', false);
+
+  assert(openHtml.indexOf('quest-status-open">Offen</span>') !== -1, 'Open status pill was not derived from q.done');
+  assert(openHtml.indexOf('quest-status-done">Erledigt</span>') === -1, 'Unrelated status data changed the status pill');
+  assert(openHtml.indexOf('<span class="quest-note-label">Expeditionsnotiz</span>&lt;Notiz &amp; Plan&gt;') !== -1, 'Quest description was not rendered as an escaped expedition note');
+  assert(openHtml.indexOf('href="clean:https://example.com/?a=1"') !== -1, 'Quest resource URL did not use cleanUrl');
+  assert(openHtml.indexOf('↗ &lt;Quelle&gt;</a>') !== -1, 'Quest resource label was not escaped');
+  assert(openHtml.indexOf("onclick=\"toggleQuest('quest-open')\"") !== -1, 'Quest toggle handler changed');
+  assert(openHtml.indexOf("onclick=\"openQuestModal('quest-open')\"") !== -1, 'Visible edit action is missing or disconnected');
+  assert(openHtml.indexOf('>Bearbeiten</span>') !== -1, 'Edit action lacks a visible label');
+  assert(openHtml.indexOf("onclick=\"delQuest('quest-open')\"") !== -1, 'Quest delete handler changed');
+
+  const doneQuest = quest('quest-done', null, true);
+  const doneHtml = renderQuestEntry(doneQuest, 0, '', false);
+  assert(doneHtml.indexOf('class="exped-card is-done"') !== -1, 'Completed quest lacks its calm card treatment hook');
+  assert(doneHtml.indexOf('quest-status-done">Erledigt</span>') !== -1, 'Completed status pill was not derived from q.done');
+})();
+
+(function keepsQuestCheckboxTouchTargetTiedToTheSharedMinimum() {
+  assert(source.indexOf('.quest-check { width:var(--touch-min); height:var(--touch-min);') !== -1, 'Quest checkbox no longer uses the shared touch-target minimum');
+})();
+
 console.log('Quest hierarchy tests OK');
