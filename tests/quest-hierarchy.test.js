@@ -10,7 +10,7 @@ if (helpersStart < 0 || helpersEnd < 0) {
   throw new Error('Quest hierarchy helpers not found in index.html');
 }
 
-global.S = { orte: [] };
+global.S = { welten: [], orte: [] };
 global.esc = function(value) { return String(value); };
 global.cleanUrl = function(value) { return value; };
 eval(source.slice(helpersStart, helpersEnd));
@@ -33,6 +33,33 @@ function quest(id, parentId, done) {
 function renderedQuest(html, id) {
   return html.indexOf('>' + id + '</div>') !== -1;
 }
+
+(function derivesOptionalWorldFiltersWithoutChangingQuestData() {
+  const quests = [quest('welt-a'), quest('welt-b'), quest('without-world'), quest('missing-place')];
+  quests[0].ortId = 'ort-a';
+  quests[1].ortId = 'ort-b';
+  quests[2].ortId = 'ort-ohne';
+  quests[3].ortId = 'does-not-exist';
+  const snapshot = JSON.stringify(quests);
+  global.S = {
+    welten: [{ id: 'a', name: 'Welt A' }, { id: 'b', name: 'Welt B' }, { id: 'unused', name: 'Leer' }],
+    orte: [
+      { id: 'ort-a', weltId: 'a' },
+      { id: 'ort-b', weltId: 'b' },
+      { id: 'ort-ohne', weltId: null }
+    ]
+  };
+
+  const options = getQuestWorldFilterOptions(quests);
+  assert(options.map(function(option){ return option.value; }).join(',') === 'welt:a,welt:b,ohne-bereich', 'World filter options were not limited to used, derivable areas');
+  assert(questMatchesWorldFilter(quests[0], 'welt:a'), 'Quest did not match its derived world');
+  assert(!questMatchesWorldFilter(quests[1], 'welt:a'), 'Quest matched an unrelated world');
+  assert(questMatchesWorldFilter(quests[2], 'ohne-bereich'), 'Quest without a world was not kept in the unassigned bucket');
+  assert(questMatchesWorldFilter(quests[3], 'ohne-bereich'), 'Quest with a missing place was not kept visible as unassigned');
+  assert(JSON.stringify(quests) === snapshot, 'World filter helpers mutated quest data');
+
+  global.S = { welten: [], orte: [] };
+})();
 
 (function countsDescendantsDefensivelyWithoutMutatingQuests() {
   const quests = [
@@ -164,6 +191,13 @@ function renderedQuest(html, id) {
   assert(source.indexOf('.quest-check { width:var(--touch-min); height:var(--touch-min);') !== -1, 'Quest checkbox no longer uses the shared touch-target minimum');
 })();
 
+(function keepsExpeditionCardsReadableOnNarrowViewports() {
+  assert(source.indexOf('.exped-filterbar { align-items:stretch; flex-direction:column; }') !== -1, 'Expedition filters do not stack on narrow viewports');
+  assert(source.indexOf('.exped-filterbar .filter-row { flex-wrap:nowrap; overflow-x:auto;') !== -1, 'Status filters cannot scroll safely on narrow viewports');
+  assert(source.indexOf('.exped-title-row, .quest-descendant-progress-row { flex-wrap:wrap; }') !== -1, 'Long quest titles or progress labels cannot wrap on mobile');
+  assert(source.indexOf('.exped-quest-actions .btn { flex:1; justify-content:center; }') !== -1, 'Quest actions do not retain usable mobile width');
+})();
+
 (function rendersDistinctQuestEmptyStatesWithoutMutatingData() {
   const renderStart = source.indexOf('function renderQuests()');
   const renderEnd = source.indexOf('\nfunction setQuestFilter(', renderStart);
@@ -182,8 +216,9 @@ function renderedQuest(html, id) {
   };
 
   const emptyQuests = [];
-  global.S = { quests: emptyQuests, orte: [] };
+  global.S = { quests: emptyQuests, welten: [], orte: [] };
   questViewFilter = 'erledigt';
+  questWorldFilter = 'alle';
   renderQuests();
 
   assert(S.quests === emptyQuests && S.quests.length === 0, 'The first-expedition empty state changed quest data');
@@ -196,16 +231,48 @@ function renderedQuest(html, id) {
   assert(questViewFilter === 'erledigt', 'Rendering the data-empty state changed the transient filter');
 
   const openQuest = quest('only-open');
-  global.S = { quests: [openQuest], orte: [] };
+  global.S = { quests: [openQuest], welten: [], orte: [] };
   questsView.innerHTML = '';
   questViewFilter = 'erledigt';
   renderQuests();
 
   assert(questsView.innerHTML.indexOf('Im Filter „Erledigt“ gibt es keine Expeditionen.') !== -1, 'The active-filter empty-state message is missing');
-  assert(questsView.innerHTML.indexOf('onclick="setQuestFilter(\'alle\')"') !== -1, 'The active-filter empty state cannot reset to all quests');
+  assert(questsView.innerHTML.indexOf('onclick="resetQuestFilters()"') !== -1, 'The active-filter empty state cannot reset all quest filters');
   assert(questsView.innerHTML.indexOf('Erste Expedition anlegen') === -1, 'The filter-empty state incorrectly offers first-expedition creation');
   assert(S.quests.length === 1 && S.quests[0] === openQuest, 'The filter-empty state changed quest data');
   assert(questViewFilter === 'erledigt', 'Rendering the filter-empty state reset or persisted the filter automatically');
+})();
+
+(function rendersAndCombinesTheOptionalWorldFilter() {
+  const renderStart = source.indexOf('function renderQuests()');
+  const renderEnd = source.indexOf('\nfunction setQuestFilter(', renderStart);
+  eval(source.slice(renderStart, renderEnd));
+  const questsView = { innerHTML: '' };
+  global.document = { getElementById: function(){ return questsView; } };
+  global.esc = function(value) { return String(value); };
+  const questA = quest('quest-a');
+  questA.ortId = 'ort-a';
+  const questB = quest('quest-b', null, true);
+  questB.ortId = 'ort-b';
+  global.S = {
+    quests: [questA, questB],
+    welten: [{ id: 'a', name: 'Welt A' }, { id: 'b', name: 'Welt B' }],
+    orte: [{ id: 'ort-a', weltId: 'a' }, { id: 'ort-b', weltId: 'b' }]
+  };
+  questViewFilter = 'offen';
+  questWorldFilter = 'welt:a';
+  renderQuests();
+
+  assert(questsView.innerHTML.indexOf('id="quest-world-filter"') !== -1, 'Meaningful world choices did not render the optional area filter');
+  assert(questsView.innerHTML.indexOf('<option value="welt:a" selected>Welt A</option>') !== -1, 'Selected world was not reflected in the area filter');
+  assert(renderedQuest(questsView.innerHTML, 'quest-a'), 'Quest matching status and world filters disappeared');
+  assert(!renderedQuest(questsView.innerHTML, 'quest-b'), 'Quest outside the combined filters remained visible');
+
+  global.S = { quests: [questA], welten: [{ id: 'a', name: 'Welt A' }], orte: [{ id: 'ort-a', weltId: 'a' }] };
+  questWorldFilter = 'welt:a';
+  renderQuests();
+  assert(questsView.innerHTML.indexOf('id="quest-world-filter"') === -1, 'Area filter rendered without meaningful alternatives');
+  assert(questWorldFilter === 'alle', 'Hidden area filter kept a stale transient selection');
 })();
 
 (function resetsTheTransientFilterBeforeOpeningANewExpedition() {
@@ -218,6 +285,10 @@ function renderedQuest(html, id) {
     calls.push('filter:' + filter);
     questViewFilter = filter;
   };
+  global.setQuestWorldFilter = function(filter) {
+    calls.push('world:' + filter);
+    questWorldFilter = filter;
+  };
   global.openQuestModal = function() {
     calls.push('modal');
   };
@@ -225,21 +296,33 @@ function renderedQuest(html, id) {
   eval(source.slice(helperStart, helperEnd));
 
   questViewFilter = 'erledigt';
+  questWorldFilter = 'welt:a';
   openNewExpeditionFromQuestOverview();
   assert(questViewFilter === 'alle', 'The quest-overview creation flow did not reset the completed filter to all');
+  assert(questWorldFilter === 'alle', 'The completed creation flow kept a world filter that could hide the new quest');
   assert(calls.join(',') === 'filter:alle,modal', 'The completed filter was not reset before opening the modal');
 
   calls.length = 0;
   questViewFilter = 'offen';
+  questWorldFilter = 'alle';
   openNewExpeditionFromQuestOverview();
   assert(questViewFilter === 'offen', 'The quest-overview creation flow reset the open filter');
   assert(calls.join(',') === 'modal', 'The open filter triggered an unnecessary filter reset');
 
   calls.length = 0;
   questViewFilter = 'alle';
+  questWorldFilter = 'alle';
   openNewExpeditionFromQuestOverview();
   assert(questViewFilter === 'alle', 'The quest-overview creation flow changed the all filter');
   assert(calls.join(',') === 'modal', 'The all filter triggered an unnecessary filter reset');
+
+  calls.length = 0;
+  questViewFilter = 'offen';
+  questWorldFilter = 'welt:a';
+  openNewExpeditionFromQuestOverview();
+  assert(questViewFilter === 'offen', 'Resetting the world filter changed the open status filter');
+  assert(questWorldFilter === 'alle', 'The world filter was not reset before creating a potentially unassigned quest');
+  assert(calls.join(',') === 'world:alle,modal', 'The world filter was not reset before opening the modal');
 })();
 
 console.log('Quest hierarchy tests OK');

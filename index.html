@@ -294,6 +294,11 @@ label { font-family:var(--body); font-size:11px; font-weight:600; color:var(--in
 .exped-stages-capped { margin-left:0; }
 .exped-context { display:inline-block; margin-bottom:5px; padding:2px 7px; border-radius:var(--r-pill); background:var(--paper-deep); font-family:var(--mono); font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-muted); }
 .exped-context-orphan { background:var(--danger-tint); color:var(--danger); }
+.exped-filterbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.exped-filterbar .filter-row { margin-bottom:0; }
+.exped-area-filter { display:flex; flex-direction:column; gap:4px; min-width:min(240px,100%); }
+.exped-area-filter label { font-family:var(--mono); font-size:9px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-muted); }
+.exped-area-filter select { min-height:var(--touch-min); margin:0; padding:8px 34px 8px 11px; font-size:12px; }
 .quest-item { background:var(--paper); border:1px solid var(--rule-soft); padding:10px 14px; display:flex; align-items:center; gap:10px; border-radius:var(--r-md); }
 .quest-item:hover { border-color:var(--rule); }
 .quest-check { width:var(--touch-min); height:var(--touch-min); padding:0; border:1px solid var(--rule); background:var(--paper); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; border-radius:var(--r-md); color:var(--seal-on); }
@@ -313,9 +318,23 @@ label { font-family:var(--body); font-size:11px; font-weight:600; color:var(--in
 .quest-resource-link { color:var(--seal); font-family:var(--body); font-size:12px; text-decoration:none; overflow-wrap:anywhere; }
 .quest-resource-link:hover { color:var(--seal-deep); text-decoration:underline; }
 @media(max-width:680px) {
+  .exped-filterbar { align-items:stretch; flex-direction:column; }
+  .exped-filterbar .filter-row { flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .exped-filterbar .filter-row::-webkit-scrollbar { display:none; }
+  .exped-filterbar .fp { flex-shrink:0; }
+  .exped-area-filter { width:100%; }
   .exped-card, .exped-stage { flex-wrap:wrap; }
   .exped-quest-copy { flex-basis:calc(100% - var(--touch-min) - 10px); }
+  .exped-title-row, .quest-descendant-progress-row { flex-wrap:wrap; }
   .exped-quest-actions { width:100%; justify-content:flex-end; padding-left:calc(var(--touch-min) + 10px); }
+}
+@media(max-width:440px) {
+  .exped-title { font-size:26px; }
+  .exped-card { padding:14px 12px; }
+  .exped-stage { padding:9px; }
+  .exped-stages { margin-left:10px; padding-left:9px; }
+  .exped-quest-actions { padding-left:0; }
+  .exped-quest-actions .btn { flex:1; justify-content:center; }
 }
 
 /* RESOURCE LINKS */
@@ -2520,6 +2539,7 @@ function saveRes() {
    ② QUESTS (globale Übersicht)
 ═══════════════════════════════════════════════════ */
 var questViewFilter = 'alle';
+var questWorldFilter = 'alle';
 var QUEST_TREE_MAX_DEPTH = 12;
 var QUEST_PROGRESS_MAX_DEPTH = 12;
 
@@ -2556,6 +2576,38 @@ function groupQuestsByParentId(quests) {
     groups[parentKey].push(q);
   });
   return groups;
+}
+
+function getQuestWorldFilterOptions(quests) {
+  var worlds = S.welten || [];
+  var places = S.orte || [];
+  var usedWorldIds = Object.create(null);
+  var hasUnassigned = false;
+
+  quests.forEach(function(q) {
+    var ort = q && q.ortId ? places.find(function(o){ return o.id === q.ortId; }) : null;
+    if (ort && ort.weltId && worlds.some(function(w){ return w.id === ort.weltId; })) {
+      usedWorldIds[ort.weltId] = true;
+    } else {
+      hasUnassigned = true;
+    }
+  });
+
+  var options = worlds.filter(function(w){ return usedWorldIds[w.id]; }).map(function(w){
+    return { value: 'welt:' + w.id, label: w.name || 'Unbenannte Welt' };
+  });
+  if (hasUnassigned) options.push({ value: 'ohne-bereich', label: 'Ohne Bereich' });
+  return options;
+}
+
+function questMatchesWorldFilter(q, filterValue) {
+  if (filterValue === 'alle') return true;
+  var worlds = S.welten || [];
+  var places = S.orte || [];
+  var ort = q && q.ortId ? places.find(function(o){ return o.id === q.ortId; }) : null;
+  var hasKnownWorld = !!(ort && ort.weltId && worlds.some(function(w){ return w.id === ort.weltId; }));
+  if (filterValue === 'ohne-bereich') return !hasKnownWorld;
+  return hasKnownWorld && filterValue === 'welt:' + ort.weltId;
 }
 
 function renderQuestEntry(q, depth, contextLabel, isOrphan, descendantProgress) {
@@ -2677,15 +2729,29 @@ function renderQuests() {
   html += '</div>';
   html += '</section>';
 
-  html += '<div class="filter-row">';
+  var worldOptions = getQuestWorldFilterOptions(quests);
+  var showWorldFilter = worldOptions.length > 1;
+  if (!showWorldFilter || !worldOptions.some(function(option){ return option.value === questWorldFilter; })) questWorldFilter = 'alle';
+
+  html += '<div class="exped-filterbar"><div class="filter-row">';
   ['alle','offen','erledigt'].forEach(function(f) {
     html += '<button class="fp ' + (questViewFilter===f?'active':'') + '" onclick="setQuestFilter(\'' + f + '\',this)">' + {alle:'Alle',offen:'Offen',erledigt:'✓ Erledigt'}[f] + '</button>';
   });
+  html += '</div>';
+  if (showWorldFilter) {
+    html += '<div class="exped-area-filter"><label for="quest-world-filter">Bereich</label>';
+    html += '<select id="quest-world-filter" onchange="setQuestWorldFilter(this.value)"><option value="alle">Alle Bereiche</option>';
+    worldOptions.forEach(function(option) {
+      html += '<option value="' + esc(option.value) + '"' + (questWorldFilter===option.value?' selected':'') + '>' + esc(option.label) + '</option>';
+    });
+    html += '</select></div>';
+  }
   html += '</div>';
 
   var qs = quests;
   if (questViewFilter === 'offen') qs = qs.filter(function(q){ return !q.done; });
   if (questViewFilter === 'erledigt') qs = qs.filter(function(q){ return q.done; });
+  if (questWorldFilter !== 'alle') qs = qs.filter(function(q){ return questMatchesWorldFilter(q, questWorldFilter); });
 
   if (totalQuests === 0) {
     html += '<div class="empty-st">Noch keine Expeditionen. Lege deinen ersten Weg ins Unbekannte an.';
@@ -2698,8 +2764,12 @@ function renderQuests() {
   if (!qs.length) {
     var filterLabels = { offen: 'Offen', erledigt: 'Erledigt' };
     var activeFilterLabel = filterLabels[questViewFilter] || 'Alle';
+    if (questWorldFilter !== 'alle') {
+      var activeWorld = worldOptions.find(function(option){ return option.value === questWorldFilter; });
+      if (activeWorld) activeFilterLabel += ' · ' + activeWorld.label;
+    }
     html += '<div class="empty-st">Im Filter „' + esc(activeFilterLabel) + '“ gibt es keine Expeditionen.';
-    html += '<div class="empty-st-action"><button type="button" class="btn btn-s" onclick="setQuestFilter(\'alle\')">Alle Expeditionen anzeigen</button></div>';
+    html += '<div class="empty-st-action"><button type="button" class="btn btn-s" onclick="resetQuestFilters()">Alle Expeditionen anzeigen</button></div>';
     html += '</div>';
     v.innerHTML = html;
     return;
@@ -2718,9 +2788,23 @@ function setQuestFilter(f, btn) {
   renderQuests();
 }
 
+function setQuestWorldFilter(value) {
+  questWorldFilter = value || 'alle';
+  renderQuests();
+}
+
+function resetQuestFilters() {
+  questViewFilter = 'alle';
+  questWorldFilter = 'alle';
+  renderQuests();
+}
+
 function openNewExpeditionFromQuestOverview() {
   if (questViewFilter === 'erledigt') {
+    questWorldFilter = 'alle';
     setQuestFilter('alle');
+  } else if (questWorldFilter !== 'alle') {
+    setQuestWorldFilter('alle');
   }
   openQuestModal();
 }
