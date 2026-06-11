@@ -34,6 +34,59 @@ function renderedQuest(html, id) {
   return html.indexOf('>' + id + '</div>') !== -1;
 }
 
+(function countsDescendantsDefensivelyWithoutMutatingQuests() {
+  const quests = [
+    quest('root'),
+    quest('child-done', 'root', true),
+    quest('child-open', 'root', false),
+    quest('grandchild-done', 'child-open', true),
+    quest('unrelated', null, true)
+  ];
+  const snapshot = JSON.stringify(quests);
+  const progress = getQuestDescendantProgress('root', quests.concat([null, {}]));
+
+  assert(progress.done === 2, 'Direct and indirect completed descendants were not counted');
+  assert(progress.total === 3, 'Direct and indirect descendants were not counted');
+  assert(JSON.stringify(quests) === snapshot, 'Descendant progress mutated quest data');
+  assert(getQuestDescendantProgress('', quests).total === 0, 'Missing main quest IDs were not handled defensively');
+  assert(getQuestDescendantProgress('root', null).total === 0, 'Invalid quest collections were not handled defensively');
+  quests.forEach(function(q) {
+    assert(!Object.prototype.hasOwnProperty.call(q, 'progress'), 'Progress was stored on a quest');
+    assert(!Object.prototype.hasOwnProperty.call(q, 'xp'), 'XP was stored on a quest');
+    assert(!Object.prototype.hasOwnProperty.call(q, 'miles'), 'Miles were stored on a quest');
+  });
+})();
+
+(function stopsDescendantProgressAtCyclesAndTheFixedDepthLimit() {
+  const cycleRoot = quest('cycle-root');
+  const cycleChild = quest('cycle-child', 'cycle-root', true);
+  cycleRoot.parentId = 'cycle-child';
+  const cycleProgress = getQuestDescendantProgress('cycle-root', [cycleRoot, cycleChild]);
+  assert(cycleProgress.done === 1 && cycleProgress.total === 1, 'Cycle protection counted the main quest or looped');
+
+  const deepQuests = [quest('deep-root')];
+  for (let i = 1; i <= QUEST_PROGRESS_MAX_DEPTH + 2; i++) {
+    deepQuests.push(quest('progress-depth-' + i, i === 1 ? 'deep-root' : 'progress-depth-' + (i - 1), true));
+  }
+  const deepProgress = getQuestDescendantProgress('deep-root', deepQuests);
+  assert(deepProgress.total === QUEST_PROGRESS_MAX_DEPTH, 'Descendant progress ignored its fixed depth limit');
+  assert(deepProgress.done === QUEST_PROGRESS_MAX_DEPTH, 'Completed count exceeded the fixed depth limit');
+})();
+
+(function rendersDescendantProgressOnlyOnMainCardsWithChildren() {
+  const root = quest('progress-root');
+  const childDone = quest('progress-child-done', 'progress-root', true);
+  const childOpen = quest('progress-child-open', 'progress-root', false);
+  const leafRoot = quest('leaf-root');
+  const html = renderQuestHierarchy([root, childDone, childOpen, leafRoot], [root, childDone, childOpen, leafRoot]);
+  const progressRows = html.match(/class="quest-descendant-progress"/g) || [];
+
+  assert(progressRows.length === 1, 'Progress was rendered for a main quest without descendants or for a subquest');
+  assert(html.indexOf('1 / 2 erledigt · 50%') !== -1, 'Progress row was not derived from done / total');
+  assert(html.indexOf('aria-valuenow="50"') !== -1, 'Progress bar percentage was not derived from done / total');
+  assert(html.indexOf('style="width:50%;"') !== -1, 'Progress fill percentage was not derived from done / total');
+})();
+
 (function keepsInputOrderAndHierarchy() {
   const quests = [quest('child', 'root'), quest('root'), quest('sibling')];
   const snapshot = JSON.stringify(quests);
