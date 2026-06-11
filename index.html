@@ -1815,12 +1815,12 @@ function renderWeltenList(v) {
   html += '<div class="sel-meta">' + wOrte.length + ' Werke \u00b7 ' + wBegriffe.length + ' Begriffe' + (wKontinente.length ? ' \u00b7 ' + wKontinente.length + ' Kontinente' : '') + '</div>';
   html += '<div class="btn-row" style="margin-top:6px;">';
   html += '<button class="btn btn-m btn-sm" onclick="openWeltModal(\'' + welt.id + '\')">Bearbeiten</button>';
-  html += '<button class="btn btn-m btn-sm" onclick="openOrtModal()">Neue Ortschaft +</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openOrtModal(\'' + welt.id + '\')">Neue Ortschaft +</button>';
   html += '<button class="btn btn-sm pi-act danger" style="min-height:auto;" onclick="delWelt(\'' + welt.id + '\')">\u2715</button>';
   html += '</div>';
   html += '<div class="btn-row" style="margin-top:4px;">';
-  html += '<button class="btn btn-m btn-sm" onclick="openKontinentModal()">+ Kontinent</button>';
-  html += '<button class="btn btn-m btn-sm" onclick="openLandModal()">+ Land</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openKontinentModal(null, \'' + welt.id + '\')">+ Kontinent</button>';
+  html += '<button class="btn btn-m btn-sm" onclick="openLandModal(null, \'' + welt.id + '\')">+ Land</button>';
   html += '</div>';
   html += '</div>';
 
@@ -1854,7 +1854,7 @@ function renderWeltenList(v) {
     html += '</div>';
   });
 
-  var direkteOrte = wOrte.filter(function(o){ return !o.kontinentId; });
+  var direkteOrte = wOrte.filter(function(o){ return !o.kontinentId || !S.kontinente.some(function(k){ return k.id === o.kontinentId; }); });
   if (direkteOrte.length) {
     html += '<div class="kont-group">';
     html += '<div class="kont-head">Direkt verzeichnet<span class="kh-k">Ohne Kontinent</span></div>';
@@ -2165,8 +2165,8 @@ function saveOrt() {
 }
 
 // ── KONTINENT ──
-function openKontinentModal(id) {
-  populateWeltSelect('km2-welt', null);
+function openKontinentModal(id, weltId) {
+  populateWeltSelect('km2-welt', (!id && weltId) ? weltId : null);
   document.getElementById('km2-name').value = '';
   document.getElementById('km2-icon').value = '🗺️';
   document.getElementById('km2-desc').value = '';
@@ -2213,8 +2213,8 @@ function delKontinent(id) {
 }
 
 // ── LAND ──
-function openLandModal(id) {
-  populateWeltSelect('lm-welt', null);
+function openLandModal(id, weltId) {
+  populateWeltSelect('lm-welt', (!id && weltId) ? weltId : null);
   lmUpdateKontinente();
   document.getElementById('lm-name').value = '';
   document.getElementById('lm-icon').value = '🏛️';
