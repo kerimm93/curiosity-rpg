@@ -2719,7 +2719,9 @@ function setQuestFilter(f, btn) {
 }
 
 function openNewExpeditionFromQuestOverview() {
-  setQuestFilter('alle');
+  if (questViewFilter === 'erledigt') {
+    setQuestFilter('alle');
+  }
   openQuestModal();
 }
 

@@ -223,11 +223,23 @@ function renderedQuest(html, id) {
   };
 
   eval(source.slice(helperStart, helperEnd));
+
   questViewFilter = 'erledigt';
   openNewExpeditionFromQuestOverview();
+  assert(questViewFilter === 'alle', 'The quest-overview creation flow did not reset the completed filter to all');
+  assert(calls.join(',') === 'filter:alle,modal', 'The completed filter was not reset before opening the modal');
 
-  assert(questViewFilter === 'alle', 'The quest-overview creation flow did not reset the transient filter to all');
-  assert(calls.join(',') === 'filter:alle,modal', 'The quest-overview creation flow did not reset the filter before opening the modal');
+  calls.length = 0;
+  questViewFilter = 'offen';
+  openNewExpeditionFromQuestOverview();
+  assert(questViewFilter === 'offen', 'The quest-overview creation flow reset the open filter');
+  assert(calls.join(',') === 'modal', 'The open filter triggered an unnecessary filter reset');
+
+  calls.length = 0;
+  questViewFilter = 'alle';
+  openNewExpeditionFromQuestOverview();
+  assert(questViewFilter === 'alle', 'The quest-overview creation flow changed the all filter');
+  assert(calls.join(',') === 'modal', 'The all filter triggered an unnecessary filter reset');
 })();
 
 console.log('Quest hierarchy tests OK');
