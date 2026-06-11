@@ -284,6 +284,10 @@ label { font-family:var(--body); font-size:11px; font-weight:600; color:var(--in
 .exped-quest-copy { flex:1; min-width:0; }
 .exped-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
 .exped-quest-actions { display:flex; gap:6px; flex-shrink:0; }
+.quest-descendant-progress { margin-top:12px; padding-top:10px; border-top:1px solid var(--rule-soft); }
+.quest-descendant-progress-row { display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; font-family:var(--mono); font-size:10px; color:var(--ink-muted); }
+.quest-descendant-progress-track { height:6px; overflow:hidden; border-radius:var(--r-pill); background:var(--paper-deep); }
+.quest-descendant-progress-fill { height:100%; border-radius:inherit; background:var(--ok); transition:width .4s ease; }
 .exped-edit-label { display:inline; }
 .exped-stages { display:flex; flex-direction:column; gap:7px; margin:7px 0 0 22px; padding-left:14px; border-left:2px solid var(--rule); }
 .exped-stages-capped { margin-left:0; }
@@ -2516,10 +2520,36 @@ function saveRes() {
 ═══════════════════════════════════════════════════ */
 var questViewFilter = 'alle';
 var QUEST_TREE_MAX_DEPTH = 12;
+var QUEST_PROGRESS_MAX_DEPTH = 12;
+
+function getQuestDescendantProgress(mainQuestId, quests) {
+  if (!mainQuestId || !Array.isArray(quests)) return { done: 0, total: 0 };
+
+  var grouped = groupQuestsByParentId(quests);
+  var visited = new Set([mainQuestId]);
+  var progress = { done: 0, total: 0 };
+
+  function visit(parentId, depth) {
+    if (depth >= QUEST_PROGRESS_MAX_DEPTH) return;
+
+    var children = grouped[parentId] || [];
+    children.forEach(function(child) {
+      if (!child || !child.id || visited.has(child.id)) return;
+      visited.add(child.id);
+      progress.total += 1;
+      if (child.done) progress.done += 1;
+      visit(child.id, depth + 1);
+    });
+  }
+
+  visit(mainQuestId, 0);
+  return progress;
+}
 
 function groupQuestsByParentId(quests) {
   var groups = Object.create(null);
   quests.forEach(function(q) {
+    if (!q || !q.id) return;
     var parentKey = q.parentId || '';
     if (!groups[parentKey]) groups[parentKey] = [];
     groups[parentKey].push(q);
@@ -2527,7 +2557,7 @@ function groupQuestsByParentId(quests) {
   return groups;
 }
 
-function renderQuestEntry(q, depth, contextLabel, isOrphan) {
+function renderQuestEntry(q, depth, contextLabel, isOrphan, descendantProgress) {
   var ort = q.ortId ? S.orte.find(function(o){ return o.id === q.ortId; }) : null;
   var isDone = !!q.done;
   var className = (depth === 0 ? 'exped-card' : 'exped-stage') + (isDone ? ' is-done' : '');
@@ -2546,6 +2576,13 @@ function renderQuestEntry(q, depth, contextLabel, isOrphan) {
     html += '<div class="quest-resources"><span class="quest-resources-label">Ressourcen</span><div class="quest-resource-links">';
     q.links.forEach(function(l){ html += '<a class="quest-resource-link" href="' + cleanUrl(l.url) + '" target="_blank" rel="noopener noreferrer">↗ ' + esc(l.label||l.url) + '</a>'; });
     html += '</div></div>';
+  }
+  if (descendantProgress && descendantProgress.total > 0) {
+    var descendantPercent = Math.round(descendantProgress.done / descendantProgress.total * 100);
+    html += '<div class="quest-descendant-progress">';
+    html += '<div class="quest-descendant-progress-row"><span>Unterquests</span><span>' + descendantProgress.done + ' / ' + descendantProgress.total + ' erledigt · ' + descendantPercent + '%</span></div>';
+    html += '<div class="quest-descendant-progress-track" role="progressbar" aria-label="Fortschritt der Unterquests" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + descendantPercent + '"><div class="quest-descendant-progress-fill" style="width:' + descendantPercent + '%;"></div></div>';
+    html += '</div>';
   }
   html += '</div>';
   html += '<div class="exped-quest-actions">';
@@ -2582,7 +2619,8 @@ function renderQuestHierarchy(filteredQuests, allQuests) {
     if (!q || visited.has(q.id)) return '';
     visited.add(q.id);
 
-    var html = renderQuestEntry(q, depth, contextLabel, isOrphan);
+    var descendantProgress = depth === 0 && !q.parentId ? getQuestDescendantProgress(q.id, allQuests) : null;
+    var html = renderQuestEntry(q, depth, contextLabel, isOrphan, descendantProgress);
     var children = grouped[q.id] || [];
     var childHtml = '';
     if (depth >= QUEST_TREE_MAX_DEPTH) {
