@@ -246,6 +246,32 @@ label { font-family:var(--body); font-size:11px; font-weight:600; color:var(--in
 .breadcrumb span { color:var(--ink-faint); }
 
 /* QUEST LIST */
+.exped-header { background:var(--paper); border:1px solid var(--rule); border-radius:var(--r-lg); padding:20px; margin-bottom:14px; box-shadow:var(--lift); }
+.exped-header-top { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.exped-copy { max-width:680px; }
+.exped-kicker { display:block; margin-bottom:5px; font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:var(--seal); }
+.exped-title { font-family:var(--display); font-size:30px; font-weight:600; line-height:1.05; letter-spacing:-.02em; color:var(--ink); }
+.exped-desc { margin-top:7px; font-size:13px; line-height:1.6; color:var(--ink-muted); }
+.exped-action { flex-shrink:0; }
+.exped-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:18px; border:1px solid var(--rule); border-radius:var(--r-md); overflow:hidden; background:var(--paper); }
+.exped-stat { min-width:0; padding:12px 14px; border-right:1px solid var(--rule); }
+.exped-stat:nth-child(4) { border-right:0; }
+.exped-stat-label { display:block; margin-bottom:4px; font-family:var(--body); font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-muted); }
+.exped-stat-value { display:block; font-family:var(--mono); font-size:19px; font-weight:500; line-height:1.2; color:var(--ink); }
+.exped-stat-open { background:var(--seal-tint); }
+.exped-stat-open .exped-stat-value { color:var(--seal-deep); }
+.exped-stat-done { background:var(--ok-tint); }
+.exped-stat-done .exped-stat-value { color:var(--ok); }
+.exped-progress { grid-column:1 / -1; height:6px; border-top:1px solid var(--rule); background:var(--paper-deep); overflow:hidden; }
+.exped-progress-fill { height:100%; background:var(--ok); transition:width .4s ease; }
+@media(max-width:680px) {
+  .exped-header { padding:16px; }
+  .exped-header-top { flex-direction:column; }
+  .exped-action { width:100%; }
+  .exped-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .exped-stat:nth-child(2) { border-right:0; }
+  .exped-stat:nth-child(-n+2) { border-bottom:1px solid var(--rule); }
+}
 .quest-list { display:flex; flex-direction:column; gap:8px; }
 .quest-item { background:var(--paper); border:1px solid var(--rule-soft); padding:10px 14px; display:flex; align-items:center; gap:10px; border-radius:var(--r-md); }
 .quest-item:hover { border-color:var(--rule); }
@@ -2460,10 +2486,28 @@ var questViewFilter = 'alle';
 
 function renderQuests() {
   var v = document.getElementById('quests-view');
+  var quests = S.quests;
+  var totalQuests = quests.length;
+  var doneQuests = quests.filter(function(q){ return q.done; }).length;
+  var openQuests = totalQuests - doneQuests;
+  var progressPercent = totalQuests ? Math.round(doneQuests / totalQuests * 100) : 0;
   var html = '';
-  html += '<div class="btn-row" style="margin-bottom:12px;">';
-  html += '<button class="btn btn-q" onclick="openQuestModal()">+ Neue Quest</button>';
+
+  html += '<section class="exped-header">';
+  html += '<div class="exped-header-top">';
+  html += '<div class="exped-copy"><span class="exped-kicker">Expeditionen</span>';
+  html += '<h2 class="exped-title">Deine Wege ins Unbekannte</h2>';
+  html += '<p class="exped-desc">Plane die nächsten Etappen, behalte offene Vorhaben im Blick und mache deinen Fortschritt sichtbar.</p></div>';
+  html += '<button class="btn btn-q exped-action" onclick="openQuestModal()">+ Neue Expedition</button>';
   html += '</div>';
+  html += '<div class="exped-stats">';
+  html += '<div class="exped-stat"><span class="exped-stat-label">Gesamt</span><strong class="exped-stat-value">' + totalQuests + '</strong></div>';
+  html += '<div class="exped-stat exped-stat-open"><span class="exped-stat-label">Offen</span><strong class="exped-stat-value">' + openQuests + '</strong></div>';
+  html += '<div class="exped-stat exped-stat-done"><span class="exped-stat-label">Erledigt</span><strong class="exped-stat-value">' + doneQuests + '</strong></div>';
+  html += '<div class="exped-stat"><span class="exped-stat-label">Fortschritt</span><strong class="exped-stat-value">' + progressPercent + '%</strong></div>';
+  html += '<div class="exped-progress" role="progressbar" aria-label="Globaler Expeditionsfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + progressPercent + '"><div class="exped-progress-fill" style="width:' + progressPercent + '%;"></div></div>';
+  html += '</div>';
+  html += '</section>';
 
   html += '<div class="filter-row">';
   ['alle','offen','erledigt'].forEach(function(f) {
@@ -2471,7 +2515,7 @@ function renderQuests() {
   });
   html += '</div>';
 
-  var qs = S.quests;
+  var qs = quests;
   if (questViewFilter === 'offen') qs = qs.filter(function(q){ return !q.done; });
   if (questViewFilter === 'erledigt') qs = qs.filter(function(q){ return q.done; });
 
