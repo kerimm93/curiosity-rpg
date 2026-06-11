@@ -189,7 +189,9 @@ function renderedQuest(html, id) {
   assert(S.quests === emptyQuests && S.quests.length === 0, 'The first-expedition empty state changed quest data');
   assert(questsView.innerHTML.indexOf('Noch keine Expeditionen.') !== -1, 'The first-expedition microcopy is missing');
   assert(questsView.innerHTML.indexOf('>Erste Expedition anlegen</button>') !== -1, 'The first-expedition action is missing');
-  assert(questsView.innerHTML.indexOf('onclick="openQuestModal()"') !== -1, 'The first-expedition action is not bound directly to openQuestModal');
+  assert(questsView.innerHTML.indexOf('onclick="openNewExpeditionFromQuestOverview()"') !== -1, 'The first-expedition action does not use the quest-overview creation flow');
+  assert(questsView.innerHTML.indexOf('onclick="openNewExpeditionFromQuestOverview()">+ Neue Expedition</button>') !== -1, 'The quest-overview header action does not use the shared creation flow');
+  assert(questsView.innerHTML.indexOf('onclick="openQuestModal()"') === -1, 'The first-expedition action still opens the modal directly');
   assert(questsView.innerHTML.indexOf('Alle Expeditionen anzeigen') === -1, 'The data-empty state was confused with the filter-empty state');
   assert(questViewFilter === 'erledigt', 'Rendering the data-empty state changed the transient filter');
 
@@ -204,6 +206,28 @@ function renderedQuest(html, id) {
   assert(questsView.innerHTML.indexOf('Erste Expedition anlegen') === -1, 'The filter-empty state incorrectly offers first-expedition creation');
   assert(S.quests.length === 1 && S.quests[0] === openQuest, 'The filter-empty state changed quest data');
   assert(questViewFilter === 'erledigt', 'Rendering the filter-empty state reset or persisted the filter automatically');
+})();
+
+(function resetsTheTransientFilterBeforeOpeningANewExpedition() {
+  const helperStart = source.indexOf('function openNewExpeditionFromQuestOverview()');
+  const helperEnd = source.indexOf('\nfunction switchTabByName(', helperStart);
+  if (helperStart < 0 || helperEnd < 0) throw new Error('Quest-overview creation helper not found in index.html');
+
+  const calls = [];
+  global.setQuestFilter = function(filter) {
+    calls.push('filter:' + filter);
+    questViewFilter = filter;
+  };
+  global.openQuestModal = function() {
+    calls.push('modal');
+  };
+
+  eval(source.slice(helperStart, helperEnd));
+  questViewFilter = 'erledigt';
+  openNewExpeditionFromQuestOverview();
+
+  assert(questViewFilter === 'alle', 'The quest-overview creation flow did not reset the transient filter to all');
+  assert(calls.join(',') === 'filter:alle,modal', 'The quest-overview creation flow did not reset the filter before opening the modal');
 })();
 
 console.log('Quest hierarchy tests OK');

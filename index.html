@@ -2666,7 +2666,7 @@ function renderQuests() {
   html += '<div class="exped-copy"><span class="exped-kicker">Expeditionen</span>';
   html += '<h2 class="exped-title">Deine Wege ins Unbekannte</h2>';
   html += '<p class="exped-desc">Plane die nächsten Etappen, behalte offene Vorhaben im Blick und mache deinen Fortschritt sichtbar.</p></div>';
-  html += '<button class="btn btn-q exped-action" onclick="openQuestModal()">+ Neue Expedition</button>';
+  html += '<button class="btn btn-q exped-action" onclick="openNewExpeditionFromQuestOverview()">+ Neue Expedition</button>';
   html += '</div>';
   html += '<div class="exped-stats">';
   html += '<div class="exped-stat"><span class="exped-stat-label">Gesamt</span><strong class="exped-stat-value">' + totalQuests + '</strong></div>';
@@ -2689,7 +2689,7 @@ function renderQuests() {
 
   if (totalQuests === 0) {
     html += '<div class="empty-st">Noch keine Expeditionen. Lege deinen ersten Weg ins Unbekannte an.';
-    html += '<div class="empty-st-action"><button type="button" class="btn btn-q" onclick="openQuestModal()">Erste Expedition anlegen</button></div>';
+    html += '<div class="empty-st-action"><button type="button" class="btn btn-q" onclick="openNewExpeditionFromQuestOverview()">Erste Expedition anlegen</button></div>';
     html += '</div>';
     v.innerHTML = html;
     return;
@@ -2716,6 +2716,11 @@ function setQuestFilter(f, btn) {
   document.querySelectorAll('#quests-view .filter-row .fp').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   renderQuests();
+}
+
+function openNewExpeditionFromQuestOverview() {
+  setQuestFilter('alle');
+  openQuestModal();
 }
 
 function switchTabByName(name) {
